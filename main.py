@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -6,6 +7,7 @@ from typing import Optional, List, Dict
 import httpx
 import os
 import logging
+import json
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -44,6 +46,76 @@ class ChatRequest(BaseModel):
     prompt: Optional[str] = None
     system_prompt: Optional[str] = None
     messages: Optional[List[Dict[str, str]]] = None
+
+
+@app.post("/api/chat/stream")
+async def chat_stream(request: ChatRequest):
+    """Streaming endpoint для получения ответов по частям"""
+    try:
+        logger.info(f"Received streaming chat request: messages={bool(request.messages)}, prompt={bool(request.prompt)}")
+        
+        # Поддержка старого формата (только prompt) и нового (system_prompt + messages)
+        if request.messages:
+            messages = []
+            if request.system_prompt:
+                messages.append({"role": "system", "content": request.system_prompt})
+            messages.extend(request.messages)
+        elif request.prompt:
+            messages = [{"role": "user", "content": request.prompt}]
+        else:
+            logger.error("Neither 'prompt' nor 'messages' provided")
+            raise HTTPException(status_code=400, detail="Either 'prompt' or 'messages' must be provided")
+        
+        if not API_KEY:
+            logger.error("API_KEY is not set")
+            raise HTTPException(status_code=500, detail="API key is not configured")
+        
+        headers = {
+            "Authorization": f"Bearer {API_KEY}",
+            "Content-Type": "application/json"
+        }
+        
+        payload = {
+            "model": "deepseek-chat",
+            "messages": messages,
+            "temperature": 0.3,
+            "stream": True
+        }
+        
+        async def generate():
+            try:
+                async with httpx.AsyncClient(timeout=120.0) as client:
+                    async with client.stream(
+                        "POST",
+                        DEEPSEEK_API_URL,
+                        headers=headers,
+                        json=payload
+                    ) as response:
+                        response.raise_for_status()
+                        
+                        async for line in response.aiter_lines():
+                            if line.startswith("data: "):
+                                data_str = line[6:]  # Убираем "data: "
+                                if data_str == "[DONE]":
+                                    break
+                                try:
+                                    data = json.loads(data_str)
+                                    if "choices" in data and len(data["choices"]) > 0:
+                                        delta = data["choices"][0].get("delta", {})
+                                        content = delta.get("content", "")
+                                        if content:
+                                            yield f"data: {json.dumps({'content': content})}\n\n"
+                                except json.JSONDecodeError:
+                                    continue
+            except Exception as e:
+                logger.error(f"Streaming error: {str(e)}")
+                yield f"data: {json.dumps({'error': str(e)})}\n\n"
+        
+        return StreamingResponse(generate(), media_type="text/event-stream")
+        
+    except Exception as e:
+        logger.error(f"Unexpected error in streaming: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
 @app.post("/api/chat")

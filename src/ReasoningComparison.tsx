@@ -11,11 +11,9 @@ interface ReasoningResult {
   response: string
   isLoading: boolean
   error?: string
+  progress?: number
 }
 
-interface ChatResponse {
-  response: string
-}
 
 function ReasoningComparison() {
   const [task, setTask] = useState('')
@@ -31,58 +29,110 @@ function ReasoningComparison() {
     scrollToBottom()
   }, [results])
 
-  const typeMessage = (resultId: string, fullText: string) => {
-    let currentIndex = 0
-    const delay = 5
-
-    const typeInterval = setInterval(() => {
-      if (currentIndex < fullText.length) {
-        setResults((prev) =>
-          prev.map((r) =>
-            r.id === resultId
-              ? { ...r, response: fullText.slice(0, currentIndex + 1) }
-              : r
-          )
-        )
-        currentIndex++
-        scrollToBottom()
-      } else {
-        clearInterval(typeInterval)
-        setResults((prev) =>
-          prev.map((r) =>
-            r.id === resultId ? { ...r, isLoading: false } : r
-          )
-        )
-      }
-    }, delay)
-
-    return () => clearInterval(typeInterval)
-  }
-
-  const callAPI = async (prompt: string, systemPrompt?: string): Promise<string> => {
+  const callAPIStream = async (
+    resultId: string,
+    prompt: string,
+    systemPrompt?: string
+  ): Promise<void> => {
     const messages = []
     if (systemPrompt) {
       messages.push({ role: 'system', content: systemPrompt })
     }
     messages.push({ role: 'user', content: prompt })
 
-    const res = await fetch('/api/chat', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        messages: messages,
-      }),
-    })
+    try {
+      const res = await fetch('/api/chat/stream', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messages: messages,
+        }),
+      })
 
-    if (!res.ok) {
-      const errorData = await res.json().catch(() => ({ detail: 'Unknown error' }))
-      throw new Error(errorData.detail || `HTTP error! status: ${res.status}`)
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ detail: 'Unknown error' }))
+        throw new Error(errorData.detail || `HTTP error! status: ${res.status}`)
+      }
+
+      const reader = res.body?.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let fullResponse = ''
+
+      if (!reader) {
+        throw new Error('No response body')
+      }
+
+      // Обновляем статус - начинаем получать данные
+      setResults((prev) =>
+        prev.map((r) =>
+          r.id === resultId
+            ? { ...r, isLoading: true, progress: 10, response: '' }
+            : r
+        )
+      )
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const dataStr = line.slice(6)
+            try {
+              const data = JSON.parse(dataStr)
+              if (data.content) {
+                fullResponse += data.content
+                setResults((prev) =>
+                  prev.map((r) =>
+                    r.id === resultId
+                      ? {
+                          ...r,
+                          response: fullResponse,
+                          isLoading: true,
+                          progress: Math.min(90, 10 + (fullResponse.length / 1000) * 80),
+                        }
+                      : r
+                  )
+                )
+                scrollToBottom()
+              } else if (data.error) {
+                throw new Error(data.error)
+              }
+            } catch (e) {
+              // Игнорируем ошибки парсинга отдельных чанков
+            }
+          }
+        }
+      }
+
+      // Завершаем
+      setResults((prev) =>
+        prev.map((r) =>
+          r.id === resultId
+            ? { ...r, isLoading: false, progress: 100, response: fullResponse }
+            : r
+        )
+      )
+    } catch (error) {
+      setResults((prev) =>
+        prev.map((r) =>
+          r.id === resultId
+            ? {
+                ...r,
+                isLoading: false,
+                error: error instanceof Error ? error.message : 'Произошла ошибка',
+              }
+            : r
+        )
+      )
     }
-
-    const data: ChatResponse = await res.json()
-    return data.response
   }
 
   const handleSubmit = async (e?: React.FormEvent) => {
@@ -141,56 +191,76 @@ function ReasoningComparison() {
 
     setResults(initialResults)
 
-    // Обрабатываем каждый метод
+    // Обрабатываем каждый метод с использованием streaming
     const processMethod = async (result: ReasoningResult) => {
       try {
-        let response = ''
-        
         if (result.id === 'direct') {
           // Прямой ответ
-          response = await callAPI(task)
+          await callAPIStream(result.id, task)
         } else if (result.id === 'stepwise') {
           // Пошаговое решение
-          response = await callAPI(`${task}\n\nРешай пошагово, объясняя каждый шаг.`)
+          await callAPIStream(result.id, `${task}\n\nРешай пошагово, объясняя каждый шаг.`)
         } else if (result.id === 'prompt-engineering') {
-          // Сначала получаем промпт от ИИ
+          // Для этого метода нужен двухэтапный процесс
+          // Сначала получаем промпт (не streaming, т.к. короткий)
           const promptPrompt = `Создай оптимальный промпт для решения следующей задачи, который поможет получить наиболее точный и полный ответ. Отвечай только промптом, без дополнительных пояснений.\n\nЗадача: ${task}`
-          const generatedPrompt = await callAPI(promptPrompt, 'Ты — эксперт по созданию промптов для решения задач.')
-          // Затем используем этот промпт для решения задачи
-          response = await callAPI(generatedPrompt)
-          // Добавляем информацию о промпте
-          response = `Использованный промпт: "${generatedPrompt}"\n\n---\n\nРешение:\n${response}`
+          
+          // Получаем промпт обычным способом
+          const res = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              messages: [
+                { role: 'system', content: 'Ты — эксперт по созданию промптов для решения задач.' },
+                { role: 'user', content: promptPrompt }
+              ],
+            }),
+          })
+          const data = await res.json()
+          const generatedPrompt = data.response
+          
+          // Затем используем streaming для решения задачи
+          await callAPIStream(result.id, generatedPrompt)
+          
+          // Обновляем результат с информацией о промпте
+          setResults((prev) =>
+            prev.map((r) =>
+              r.id === result.id
+                ? {
+                    ...r,
+                    response: `Использованный промпт: "${generatedPrompt}"\n\n---\n\nРешение:\n${r.response}`,
+                  }
+                : r
+            )
+          )
         } else if (result.id === 'expert-1') {
           // Эксперт-математик
-          response = await callAPI(task, 'Ты — опытный математик с глубокими знаниями в алгебре, геометрии и математическом анализе. Реши задачу, показав все математические выкладки и обоснования.')
+          await callAPIStream(
+            result.id,
+            task,
+            'Ты — опытный математик с глубокими знаниями в алгебре, геометрии и математическом анализе. Реши задачу, показав все математические выкладки и обоснования.'
+          )
         } else if (result.id === 'expert-2') {
           // Эксперт-логик
-          response = await callAPI(task, 'Ты — эксперт по логике и дедуктивному мышлению. Реши задачу, используя логические рассуждения и пошаговый анализ.')
+          await callAPIStream(
+            result.id,
+            task,
+            'Ты — эксперт по логике и дедуктивному мышлению. Реши задачу, используя логические рассуждения и пошаговый анализ.'
+          )
         } else if (result.id === 'expert-3') {
           // Эксперт-аналитик
-          response = await callAPI(task, 'Ты — аналитик, специализирующийся на комплексном анализе проблем. Реши задачу, рассмотрев её с разных углов и предложив наиболее эффективное решение.')
-        }
-
-        // Обновляем результат
-        setResults((prev) =>
-          prev.map((r) =>
-            r.id === result.id
-              ? { ...r, response: '', isLoading: true }
-              : r
+          await callAPIStream(
+            result.id,
+            task,
+            'Ты — аналитик, специализирующийся на комплексном анализе проблем. Реши задачу, рассмотрев её с разных углов и предложив наиболее эффективное решение.'
           )
-        )
-
-        // Запускаем анимацию печати
-        setTimeout(() => {
-          typeMessage(result.id, response)
-        }, 100)
+        }
       } catch (error) {
         setResults((prev) =>
           prev.map((r) =>
             r.id === result.id
               ? {
                   ...r,
-                  response: '',
                   isLoading: false,
                   error: error instanceof Error ? error.message : 'Произошла ошибка',
                 }
@@ -313,7 +383,17 @@ function ReasoningComparison() {
                   </div>
                   <div className="result-content">
                     {result.isLoading ? (
-                      <div className="loading-indicator">Генерация ответа...</div>
+                      <div className="loading-container">
+                        <div className="progress-bar-container">
+                          <div 
+                            className="progress-bar" 
+                            style={{ width: `${result.progress || 10}%` }}
+                          />
+                        </div>
+                        <div className="loading-indicator">
+                          {result.progress ? `Генерация ответа... ${Math.round(result.progress)}%` : 'Подготовка...'}
+                        </div>
+                      </div>
                     ) : result.error ? (
                       <div className="error-message">Ошибка: {result.error}</div>
                     ) : (
