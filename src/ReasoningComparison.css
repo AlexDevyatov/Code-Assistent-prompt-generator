@@ -184,22 +184,10 @@
   color: #333;
   white-space: pre-wrap;
   word-wrap: break-word;
-  text-align: left;
-  overflow-wrap: break-word;
-  max-width: 100%;
-  overflow-x: auto;
 }
 
 .result-text .katex {
   font-size: 1.1em;
-  display: inline-block;
-  max-width: 100%;
-  overflow-x: auto;
-}
-
-.result-text .katex-display {
-  max-width: 100%;
-  overflow-x: auto;
 }
 
 .loading-container {
@@ -331,8 +319,6 @@
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   width: 100%;
   max-width: 100%;
-  overflow-x: auto;
-  box-sizing: border-box;
 }
 
 .comparison-text {
@@ -341,22 +327,6 @@
   font-size: 16px;
   white-space: pre-wrap;
   word-wrap: break-word;
-  overflow-wrap: break-word;
-  text-align: left;
-  overflow-x: auto;
-  max-width: 100%;
-}
-
-.comparison-text .katex {
-  font-size: 1.1em;
-  display: inline-block;
-  max-width: 100%;
-  overflow-x: auto;
-}
-
-.comparison-text .katex-display {
-  max-width: 100%;
-  overflow-x: auto;
 }
 
 @media (max-width: 768px) {
