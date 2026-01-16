@@ -225,33 +225,66 @@ if [ "$DRY_RUN" = false ]; then
     SYSTEMD_FILE="/etc/systemd/system/deepseek-web-client.service"
     if [ -f "$SYSTEMD_FILE" ]; then
         log "${YELLOW}🔍 Проверка конфигурации systemd...${NC}"
+        log "${GREEN}✅ Файл сервиса найден${NC}"
         
-        # Проверяем, что сервис слушает на 0.0.0.0
+        # Выводим текущую конфигурацию
         if grep -q "ExecStart" "$SYSTEMD_FILE"; then
-            if grep "ExecStart" "$SYSTEMD_FILE" | grep -q "0.0.0.0"; then
-                log "${GREEN}✅ Сервис настроен на прослушивание 0.0.0.0:8000${NC}"
+            CURRENT_CONFIG=$(grep "ExecStart" "$SYSTEMD_FILE" | head -1)
+            log "${BLUE}Текущая конфигурация ExecStart:${NC}"
+            log "   $CURRENT_CONFIG"
+            
+            # Проверяем, что сервис слушает на 0.0.0.0
+            if echo "$CURRENT_CONFIG" | grep -q "0.0.0.0"; then
+                log "${GREEN}✅ Сервис уже настроен на прослушивание 0.0.0.0:8000${NC}"
             else
                 log "${YELLOW}⚠️  Сервис не слушает на 0.0.0.0, исправление...${NC}"
                 
                 # Создаем резервную копию
-                sudo cp "$SYSTEMD_FILE" "${SYSTEMD_FILE}.backup.$(date +%Y%m%d_%H%M%S)" 2>/dev/null || true
+                BACKUP_FILE="${SYSTEMD_FILE}.backup.$(date +%Y%m%d_%H%M%S)"
+                if sudo cp "$SYSTEMD_FILE" "$BACKUP_FILE" 2>/dev/null; then
+                    log "${GREEN}✅ Резервная копия создана: $BACKUP_FILE${NC}"
+                else
+                    log "${YELLOW}⚠️  Не удалось создать резервную копию${NC}"
+                fi
                 
                 # Исправляем конфигурацию
-                if sudo sed -i 's/--host [0-9.]*/--host 0.0.0.0/g' "$SYSTEMD_FILE" 2>/dev/null || \
-                   sudo sed -i 's/uvicorn main:app/uvicorn main:app --host 0.0.0.0/g' "$SYSTEMD_FILE" 2>/dev/null; then
+                FIXED=false
+                if sudo sed -i 's/--host [0-9.]*/--host 0.0.0.0/g' "$SYSTEMD_FILE" 2>/dev/null; then
+                    FIXED=true
+                elif sudo sed -i 's/uvicorn main:app/uvicorn main:app --host 0.0.0.0/g' "$SYSTEMD_FILE" 2>/dev/null; then
+                    FIXED=true
+                fi
+                
+                if [ "$FIXED" = true ]; then
                     log "${GREEN}✅ Конфигурация исправлена${NC}"
+                    
+                    # Выводим новую конфигурацию
+                    NEW_CONFIG=$(grep "ExecStart" "$SYSTEMD_FILE" | head -1)
+                    log "${BLUE}Новая конфигурация ExecStart:${NC}"
+                    log "   $NEW_CONFIG"
+                    
                     log "${YELLOW}🔄 Перезагрузка systemd...${NC}"
-                    sudo systemctl daemon-reload 2>/dev/null || true
+                    if sudo systemctl daemon-reload 2>/dev/null; then
+                        log "${GREEN}✅ Systemd перезагружен${NC}"
+                    else
+                        log "${YELLOW}⚠️  Не удалось перезагрузить systemd${NC}"
+                    fi
                 else
-                    log "${YELLOW}⚠️  Не удалось автоматически исправить конфигурацию${NC}"
-                    log "${YELLOW}💡 Отредактируйте вручную: sudo nano $SYSTEMD_FILE${NC}"
-                    log "${YELLOW}💡 Убедитесь, что ExecStart содержит: --host 0.0.0.0 --port 8000${NC}"
+                    log "${RED}❌ Не удалось автоматически исправить конфигурацию${NC}"
+                    log "${YELLOW}💡 Отредактируйте файл вручную:${NC}"
+                    log "   sudo nano $SYSTEMD_FILE"
+                    log ""
+                    log "${YELLOW}💡 Убедитесь, что строка ExecStart содержит:${NC}"
+                    log "   ExecStart=/путь/к/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000"
                 fi
             fi
+        else
+            log "${YELLOW}⚠️  Строка ExecStart не найдена в конфигурации${NC}"
+            log "${YELLOW}💡 Проверьте файл сервиса вручную${NC}"
         fi
     else
         log "${BLUE}ℹ️  Файл systemd не найден: $SYSTEMD_FILE${NC}"
-        log "${YELLOW}💡 Создайте файл сервиса (см. DEPLOY.md)${NC}"
+        log "${YELLOW}💡 Создайте файл сервиса (см. DEPLOY.md, Шаг 6)${NC}"
     fi
 else
     log "${BLUE}🔍 [DRY-RUN] Пропущено: проверка конфигурации systemd${NC}"
@@ -272,12 +305,14 @@ if [ "$DRY_RUN" = false ]; then
                     log "${GREEN}✅ Порт 8000 слушается${NC}"
                     
                     # Проверка, что слушается на 0.0.0.0
+                    sleep 1
                     if netstat -tuln 2>/dev/null | grep ":8000 " | grep -q "0.0.0.0" || \
                        ss -tuln 2>/dev/null | grep ":8000 " | grep -q "0.0.0.0"; then
                         log "${GREEN}✅ Сервис слушает на 0.0.0.0:8000 (доступен извне)${NC}"
                     else
-                        log "${YELLOW}⚠️  Сервис слушает только на localhost${NC}"
-                        log "${YELLOW}💡 Проверьте конфигурацию systemd${NC}"
+                        log "${YELLOW}⚠️  Сервис еще не слушает на 0.0.0.0, подождите несколько секунд${NC}"
+                        log "${YELLOW}💡 Если проблема сохраняется, проверьте конфигурацию systemd${NC}"
+                        log "${YELLOW}💡 Запустите: ./fix_systemd.sh${NC}"
                     fi
                 else
                     log "${YELLOW}⚠️  Порт 8000 не слушается${NC}"
