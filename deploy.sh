@@ -151,6 +151,24 @@ else
     log "${BLUE}⏭️  Пропущено обновление зависимостей (--skip-deps)${NC}"
 fi
 
+# Проверка переменных окружения
+if [ "$DRY_RUN" = false ]; then
+    log "${YELLOW}🔍 Проверка переменных окружения...${NC}"
+    if [ -f ".env" ]; then
+        if grep -q "DEEPSEEK_API_KEY" .env && [ -n "$(grep DEEPSEEK_API_KEY .env | cut -d'=' -f2 | tr -d ' ')" ]; then
+            log "${GREEN}✅ .env файл существует и содержит DEEPSEEK_API_KEY${NC}"
+        else
+            log "${YELLOW}⚠️  .env файл существует, но DEEPSEEK_API_KEY не установлен или пуст${NC}"
+            log "${YELLOW}💡 Убедитесь, что в .env есть: DEEPSEEK_API_KEY=ваш-ключ${NC}"
+        fi
+    else
+        log "${YELLOW}⚠️  .env файл не найден${NC}"
+        log "${YELLOW}💡 Создайте файл .env с содержимым: DEEPSEEK_API_KEY=ваш-ключ${NC}"
+    fi
+else
+    log "${BLUE}🔍 [DRY-RUN] Пропущено: проверка переменных окружения${NC}"
+fi
+
 # Создание бэкапа статики перед сборкой
 if [ "$DRY_RUN" = false ] && [ -d "static" ]; then
     BACKUP_DIR="static_backup_$(date +%Y%m%d_%H%M%S)"
@@ -180,23 +198,109 @@ else
     log "${BLUE}🔍 [DRY-RUN] Пропущено: npm run build${NC}"
 fi
 
-# Перезапуск systemd сервиса (если используется)
+# Проверка и настройка файрвола
 if [ "$DRY_RUN" = false ]; then
-    if systemctl is-active --quiet deepseek-web-client 2>/dev/null; then
-        log "${YELLOW}🔄 Перезапуск сервиса deepseek-web-client...${NC}"
-        if sudo systemctl restart deepseek-web-client; then
-            sleep 2
-            if systemctl is-active --quiet deepseek-web-client; then
-                log "${GREEN}✅ Сервис перезапущен и работает${NC}"
-            else
-                log "${RED}❌ Сервис не запустился после перезапуска${NC}"
-                log "${YELLOW}💡 Попробуйте: sudo systemctl status deepseek-web-client${NC}"
-            fi
+    log "${YELLOW}🔥 Проверка файрвола...${NC}"
+    if command -v ufw &> /dev/null; then
+        if ufw status | grep -q "8000/tcp"; then
+            log "${GREEN}✅ Порт 8000 уже открыт в файрволе${NC}"
         else
-            log "${YELLOW}⚠️  Предупреждение: не удалось перезапустить сервис (возможно, нет прав sudo)${NC}"
+            log "${YELLOW}🔓 Открытие порта 8000 в файрволе...${NC}"
+            if sudo ufw allow 8000/tcp 2>/dev/null; then
+                log "${GREEN}✅ Порт 8000 открыт в файрволе${NC}"
+            else
+                log "${YELLOW}⚠️  Не удалось открыть порт в файрволе (возможно, нет прав sudo)${NC}"
+                log "${YELLOW}💡 Выполните вручную: sudo ufw allow 8000/tcp${NC}"
+            fi
         fi
     else
-        log "${BLUE}ℹ️  Сервис deepseek-web-client не активен или не установлен${NC}"
+        log "${BLUE}ℹ️  ufw не установлен, пропущено${NC}"
+    fi
+else
+    log "${BLUE}🔍 [DRY-RUN] Пропущено: проверка файрвола${NC}"
+fi
+
+# Проверка и исправление конфигурации systemd
+if [ "$DRY_RUN" = false ]; then
+    SYSTEMD_FILE="/etc/systemd/system/deepseek-web-client.service"
+    if [ -f "$SYSTEMD_FILE" ]; then
+        log "${YELLOW}🔍 Проверка конфигурации systemd...${NC}"
+        
+        # Проверяем, что сервис слушает на 0.0.0.0
+        if grep -q "ExecStart" "$SYSTEMD_FILE"; then
+            if grep "ExecStart" "$SYSTEMD_FILE" | grep -q "0.0.0.0"; then
+                log "${GREEN}✅ Сервис настроен на прослушивание 0.0.0.0:8000${NC}"
+            else
+                log "${YELLOW}⚠️  Сервис не слушает на 0.0.0.0, исправление...${NC}"
+                
+                # Создаем резервную копию
+                sudo cp "$SYSTEMD_FILE" "${SYSTEMD_FILE}.backup.$(date +%Y%m%d_%H%M%S)" 2>/dev/null || true
+                
+                # Исправляем конфигурацию
+                if sudo sed -i 's/--host [0-9.]*/--host 0.0.0.0/g' "$SYSTEMD_FILE" 2>/dev/null || \
+                   sudo sed -i 's/uvicorn main:app/uvicorn main:app --host 0.0.0.0/g' "$SYSTEMD_FILE" 2>/dev/null; then
+                    log "${GREEN}✅ Конфигурация исправлена${NC}"
+                    log "${YELLOW}🔄 Перезагрузка systemd...${NC}"
+                    sudo systemctl daemon-reload 2>/dev/null || true
+                else
+                    log "${YELLOW}⚠️  Не удалось автоматически исправить конфигурацию${NC}"
+                    log "${YELLOW}💡 Отредактируйте вручную: sudo nano $SYSTEMD_FILE${NC}"
+                    log "${YELLOW}💡 Убедитесь, что ExecStart содержит: --host 0.0.0.0 --port 8000${NC}"
+                fi
+            fi
+        fi
+    else
+        log "${BLUE}ℹ️  Файл systemd не найден: $SYSTEMD_FILE${NC}"
+        log "${YELLOW}💡 Создайте файл сервиса (см. DEPLOY.md)${NC}"
+    fi
+else
+    log "${BLUE}🔍 [DRY-RUN] Пропущено: проверка конфигурации systemd${NC}"
+fi
+
+# Перезапуск systemd сервиса (если используется)
+if [ "$DRY_RUN" = false ]; then
+    if [ -f "/etc/systemd/system/deepseek-web-client.service" ]; then
+        log "${YELLOW}🔄 Перезапуск сервиса deepseek-web-client...${NC}"
+        if sudo systemctl restart deepseek-web-client 2>/dev/null; then
+            sleep 3
+            if systemctl is-active --quiet deepseek-web-client 2>/dev/null; then
+                log "${GREEN}✅ Сервис перезапущен и работает${NC}"
+                
+                # Проверка, что порт слушается
+                sleep 1
+                if netstat -tuln 2>/dev/null | grep -q ":8000 " || ss -tuln 2>/dev/null | grep -q ":8000 "; then
+                    log "${GREEN}✅ Порт 8000 слушается${NC}"
+                    
+                    # Проверка, что слушается на 0.0.0.0
+                    if netstat -tuln 2>/dev/null | grep ":8000 " | grep -q "0.0.0.0" || \
+                       ss -tuln 2>/dev/null | grep ":8000 " | grep -q "0.0.0.0"; then
+                        log "${GREEN}✅ Сервис слушает на 0.0.0.0:8000 (доступен извне)${NC}"
+                    else
+                        log "${YELLOW}⚠️  Сервис слушает только на localhost${NC}"
+                        log "${YELLOW}💡 Проверьте конфигурацию systemd${NC}"
+                    fi
+                else
+                    log "${YELLOW}⚠️  Порт 8000 не слушается${NC}"
+                fi
+                
+                # Проверка health endpoint
+                sleep 1
+                if curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/api/health 2>/dev/null | grep -q "200"; then
+                    log "${GREEN}✅ Health endpoint отвечает${NC}"
+                else
+                    log "${YELLOW}⚠️  Health endpoint не отвечает${NC}"
+                fi
+            else
+                log "${RED}❌ Сервис не запустился после перезапуска${NC}"
+                log "${YELLOW}💡 Проверьте логи: sudo journalctl -u deepseek-web-client -n 50${NC}"
+            fi
+        else
+            log "${YELLOW}⚠️  Не удалось перезапустить сервис (возможно, нет прав sudo)${NC}"
+            log "${YELLOW}💡 Попробуйте вручную: sudo systemctl restart deepseek-web-client${NC}"
+        fi
+    else
+        log "${BLUE}ℹ️  Сервис deepseek-web-client не установлен${NC}"
+        log "${YELLOW}💡 Создайте файл сервиса (см. DEPLOY.md, Шаг 6)${NC}"
     fi
 else
     log "${BLUE}🔍 [DRY-RUN] Пропущено: перезапуск сервисов${NC}"
@@ -214,5 +318,14 @@ if [ "$DRY_RUN" = false ]; then
     log "   - Бэкап: $BACKUP_DIR (если создан)"
 fi
 log "${GREEN}🌐 Сайт должен быть доступен по адресу вашего сервера${NC}"
+log ""
+log "${BLUE}📋 Проверка доступности:${NC}"
+log "   - Локально: curl http://localhost:8000/api/health"
+log "   - Извне: http://ваш-ip:8000"
+log ""
+log "${YELLOW}💡 Если сайт недоступен извне:${NC}"
+log "   1. Проверьте облачный файрвол (AWS, DigitalOcean и т.д.)"
+log "   2. Убедитесь, что порт 8000 открыт для входящих соединений"
+log "   3. Запустите диагностику: ./diagnose_server.sh"
 log ""
 
