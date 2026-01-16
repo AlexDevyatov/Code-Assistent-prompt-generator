@@ -22,9 +22,12 @@ function SystemPromptTest() {
   const [currentSystemPrompt, setCurrentSystemPrompt] = useState(systemPrompt)
   const [systemPromptChanged, setSystemPromptChanged] = useState(false)
   const [showSystemPromptEditor, setShowSystemPromptEditor] = useState(true)
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const systemPromptTextareaRef = useRef<HTMLTextAreaElement>(null)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -32,6 +35,22 @@ function SystemPromptTest() {
 
   useEffect(() => {
     scrollToBottom()
+  }, [messages])
+
+  useEffect(() => {
+    const handleScroll = () => {
+      if (messagesContainerRef.current) {
+        const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current
+        const isNearBottom = scrollHeight - scrollTop - clientHeight < 100
+        setShowScrollToBottom(!isNearBottom && messages.length > 0)
+      }
+    }
+
+    const messagesContainer = messagesContainerRef.current
+    if (messagesContainer) {
+      messagesContainer.addEventListener('scroll', handleScroll)
+      return () => messagesContainer.removeEventListener('scroll', handleScroll)
+    }
   }, [messages])
 
   useEffect(() => {
@@ -76,7 +95,8 @@ function SystemPromptTest() {
     return () => clearInterval(typeInterval)
   }
 
-  const handleChangeSystemPrompt = () => {
+  const handleChangeSystemPrompt = (e?: React.FormEvent) => {
+    e?.preventDefault()
     if (systemPrompt.trim() === currentSystemPrompt.trim()) {
       return
     }
@@ -92,6 +112,24 @@ function SystemPromptTest() {
     setCurrentSystemPrompt(systemPrompt)
     setSystemPromptChanged(true)
     scrollToBottom()
+  }
+
+  const handleResetSystemPrompt = () => {
+    setSystemPrompt(currentSystemPrompt)
+  }
+
+  const handleCopySystemPrompt = async () => {
+    try {
+      await navigator.clipboard.writeText(currentSystemPrompt)
+      alert('System Prompt скопирован в буфер обмена!')
+    } catch (err) {
+      console.error('Failed to copy:', err)
+    }
+  }
+
+  const handleScrollToBottom = () => {
+    scrollToBottom()
+    setShowScrollToBottom(false)
   }
 
   const handleSubmit = async (e?: React.FormEvent) => {
@@ -193,6 +231,10 @@ function SystemPromptTest() {
     }
   }
 
+  const handleSystemPromptSubmit = (e: React.FormEvent) => {
+    handleChangeSystemPrompt(e)
+  }
+
   const clearChat = () => {
     setMessages([])
     setSystemPromptChanged(false)
@@ -216,7 +258,7 @@ function SystemPromptTest() {
         <Link to="/" className="nav-link">← На главную</Link>
       </div>
       
-      <div className="system-prompt-test-container">
+      <div className="system-prompt-test-container" ref={containerRef}>
         <div className="system-prompt-test-header">
           <h1>День 5. System Prompt</h1>
           <p className="system-prompt-test-description">
@@ -226,7 +268,7 @@ function SystemPromptTest() {
           </p>
         </div>
 
-        <div className="system-prompt-section">
+        <div className="system-prompt-section sticky-section">
           <div className="system-prompt-header">
             <h2>System Prompt</h2>
             <div className="system-prompt-actions">
@@ -237,34 +279,60 @@ function SystemPromptTest() {
               >
                 {showSystemPromptEditor ? 'Скрыть' : 'Показать'}
               </button>
-              <button
-                type="button"
-                onClick={handleChangeSystemPrompt}
-                disabled={systemPrompt.trim() === currentSystemPrompt.trim() || isLoading}
-                className="change-prompt-button"
-              >
-                Применить System Prompt (Ctrl+Enter)
-              </button>
             </div>
           </div>
           
           {showSystemPromptEditor && (
-            <div className="system-prompt-editor">
-              <textarea
-                ref={systemPromptTextareaRef}
-                value={systemPrompt}
-                onChange={(e) => setSystemPrompt(e.target.value)}
-                onKeyDown={handleSystemPromptKeyDown}
-                placeholder="Введите system prompt для агента..."
-                rows={3}
-                disabled={isLoading}
-                className="system-prompt-textarea"
-              />
+            <form onSubmit={handleSystemPromptSubmit} className="system-prompt-form">
+              <div className="system-prompt-editor">
+                <label htmlFor="system-prompt-input" className="system-prompt-label">
+                  Новый System Prompt:
+                </label>
+                <textarea
+                  id="system-prompt-input"
+                  ref={systemPromptTextareaRef}
+                  value={systemPrompt}
+                  onChange={(e) => setSystemPrompt(e.target.value)}
+                  onKeyDown={handleSystemPromptKeyDown}
+                  placeholder="Введите system prompt для агента..."
+                  rows={4}
+                  disabled={isLoading}
+                  className="system-prompt-textarea"
+                />
+                <div className="system-prompt-form-actions">
+                  <button
+                    type="submit"
+                    disabled={systemPrompt.trim() === currentSystemPrompt.trim() || isLoading}
+                    className="change-prompt-button"
+                  >
+                    Применить System Prompt (Ctrl+Enter)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleResetSystemPrompt}
+                    disabled={systemPrompt.trim() === currentSystemPrompt.trim() || isLoading}
+                    className="reset-prompt-button"
+                    title="Сбросить к текущему значению"
+                  >
+                    Сбросить
+                  </button>
+                </div>
+              </div>
               <div className="current-prompt-info">
-                <span className="current-prompt-label">Текущий System Prompt:</span>
+                <div className="current-prompt-header">
+                  <span className="current-prompt-label">Текущий активный System Prompt:</span>
+                  <button
+                    type="button"
+                    onClick={handleCopySystemPrompt}
+                    className="copy-prompt-button"
+                    title="Копировать в буфер обмена"
+                  >
+                    📋 Копировать
+                  </button>
+                </div>
                 <div className="current-prompt-text">{currentSystemPrompt}</div>
               </div>
-            </div>
+            </form>
           )}
         </div>
 
@@ -291,7 +359,7 @@ function SystemPromptTest() {
             )}
           </div>
           
-          <div className="messages">
+          <div className="messages" ref={messagesContainerRef}>
             {messages.length === 0 ? (
               <div className="welcome-message">
                 <p>Начните диалог с агентом. Задайте вопрос или отправьте сообщение.</p>
@@ -339,6 +407,17 @@ function SystemPromptTest() {
             )}
             <div ref={messagesEndRef} />
           </div>
+          
+          {showScrollToBottom && (
+            <button
+              type="button"
+              onClick={handleScrollToBottom}
+              className="scroll-to-bottom-button"
+              title="Прокрутить вниз"
+            >
+              ⬇ Прокрутить вниз
+            </button>
+          )}
         </div>
 
         <div className="input-panel">

@@ -38,6 +38,24 @@
   padding: 20px;
   padding-bottom: 120px;
   overflow-y: auto;
+  height: 100%;
+}
+
+.system-prompt-test-container::-webkit-scrollbar {
+  width: 10px;
+}
+
+.system-prompt-test-container::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+.system-prompt-test-container::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 5px;
+}
+
+.system-prompt-test-container::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
 }
 
 .system-prompt-test-header {
@@ -65,6 +83,14 @@
   border-radius: 12px;
   padding: 24px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  margin-bottom: 24px;
+}
+
+.system-prompt-section.sticky-section {
+  position: sticky;
+  top: 60px;
+  z-index: 10;
+  margin-top: 0;
   margin-bottom: 24px;
 }
 
@@ -126,10 +152,57 @@
   background-color: #cccccc;
 }
 
+.system-prompt-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
 .system-prompt-editor {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.system-prompt-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 4px;
+  display: block;
+}
+
+.system-prompt-form-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.reset-prompt-button {
+  padding: 8px 16px;
+  border: 1px solid #6c757d;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  background-color: #ffffff;
+  color: #6c757d;
+}
+
+.reset-prompt-button:hover:not(:disabled) {
+  background-color: #6c757d;
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+.reset-prompt-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background-color: #f5f5f5;
+  color: #cccccc;
+  border-color: #cccccc;
 }
 
 .system-prompt-textarea {
@@ -161,6 +234,14 @@
   border-left: 4px solid #007bff;
 }
 
+.current-prompt-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  gap: 12px;
+}
+
 .current-prompt-label {
   font-size: 12px;
   color: #666;
@@ -168,7 +249,25 @@
   text-transform: uppercase;
   letter-spacing: 0.5px;
   display: block;
-  margin-bottom: 8px;
+}
+
+.copy-prompt-button {
+  padding: 4px 12px;
+  border: 1px solid #007bff;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  background-color: #ffffff;
+  color: #007bff;
+  white-space: nowrap;
+}
+
+.copy-prompt-button:hover {
+  background-color: #007bff;
+  color: #ffffff;
+  transform: translateY(-1px);
 }
 
 .current-prompt-text {
@@ -176,6 +275,22 @@
   color: #333;
   line-height: 1.6;
   white-space: pre-wrap;
+  max-height: 150px;
+  overflow-y: auto;
+  padding-right: 8px;
+}
+
+.current-prompt-text::-webkit-scrollbar {
+  width: 6px;
+}
+
+.current-prompt-text::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+.current-prompt-text::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
 }
 
 .comparison-section {
@@ -276,6 +391,50 @@
   overflow-y: auto;
   padding-bottom: 20px;
   max-height: 600px;
+  position: relative;
+}
+
+.chat-container {
+  position: relative;
+}
+
+.scroll-to-bottom-button {
+  position: absolute;
+  bottom: 80px;
+  right: 30px;
+  padding: 10px 16px;
+  background-color: #007bff;
+  color: #ffffff;
+  border: none;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 2px 8px rgba(0, 123, 255, 0.3);
+  z-index: 20;
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.scroll-to-bottom-button:hover {
+  background-color: #0056b3;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 123, 255, 0.4);
+}
+
+.scroll-to-bottom-button:active {
+  transform: translateY(0);
 }
 
 .welcome-message {
@@ -516,8 +675,25 @@
   }
 
   .toggle-button,
-  .change-prompt-button {
+  .change-prompt-button,
+  .reset-prompt-button {
     width: 100%;
+  }
+
+  .system-prompt-form-actions {
+    flex-direction: column;
+  }
+
+  .system-prompt-section.sticky-section {
+    position: relative;
+    top: 0;
+  }
+
+  .scroll-to-bottom-button {
+    bottom: 60px;
+    right: 20px;
+    padding: 8px 12px;
+    font-size: 12px;
   }
 
   .message {
