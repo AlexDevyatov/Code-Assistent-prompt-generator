@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { InlineMath, BlockMath } from 'react-katex'
 import 'katex/dist/katex.min.css'
@@ -19,6 +19,8 @@ function ReasoningComparison() {
   const [task, setTask] = useState('')
   const [results, setResults] = useState<ReasoningResult[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
+  const [comparison, setComparison] = useState<string>('')
+  const [isGeneratingComparison, setIsGeneratingComparison] = useState(false)
 
   const callAPIStream = async (
     resultId: string,
@@ -133,6 +135,7 @@ function ReasoningComparison() {
 
     setIsProcessing(true)
     setResults([])
+    setComparison('')
 
     // Создаем результаты для всех методов
     const initialResults: ReasoningResult[] = [
@@ -271,17 +274,70 @@ function ReasoningComparison() {
     setIsProcessing(false)
   }
 
+  // Генерируем сравнение когда все результаты готовы
+  useEffect(() => {
+    const generateComparison = async () => {
+      // Проверяем, что все результаты готовы (не загружаются и нет ошибок)
+      const readyResults = results.filter(r => !r.isLoading && !r.error && r.response)
+      const allReady = results.length > 0 && results.every(r => !r.isLoading)
+      
+      // Проверяем, что сравнение еще не генерируется и не было сгенерировано
+      if (allReady && readyResults.length > 0 && !isProcessing && !isGeneratingComparison && !comparison) {
+        setIsGeneratingComparison(true)
+        try {
+          // Получаем все ответы
+          const allResponses = readyResults
+            .map(r => `${r.method}:\n${r.response}`)
+            .join('\n\n---\n\n')
+
+          if (allResponses.length === 0) {
+            setComparison('')
+            setIsGeneratingComparison(false)
+            return
+          }
+
+          const comparisonPrompt = `Ниже представлены ответы разных методов решения задачи "${task}":
+
+${allResponses}
+
+Сравните, отличаются ли ответы и какой из них оказался правильнее. Проанализируйте каждый метод, укажите различия и определите наиболее точный и полный ответ. Все математические формулы, уравнения, выражения и символы должны быть строго в формате LaTeX. Используй синтаксис LaTeX: $...$ для inline формул и $$...$$ для блочных формул.`
+
+          const res = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              messages: [
+                { role: 'system', content: 'Ты — эксперт по анализу и сравнению решений задач. Твоя задача — сравнить разные подходы и определить наиболее правильный ответ. ОБЯЗАТЕЛЬНО используй LaTeX для всех математических формул.' },
+                { role: 'user', content: comparisonPrompt }
+              ],
+            }),
+          })
+
+          const data = await res.json()
+          setComparison(data.response)
+        } catch (error) {
+          setComparison('Ошибка при генерации сравнения: ' + (error instanceof Error ? error.message : 'Неизвестная ошибка'))
+        } finally {
+          setIsGeneratingComparison(false)
+        }
+      }
+    }
+
+    generateComparison()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [results, isProcessing, task])
+
   const renderMath = (text: string) => {
     if (!text) return ['']
     
-    // Улучшенный парсер для LaTeX формул
+    // Конвертируем весь текст в LaTeX формат
     // Обрабатываем block math ($$...$$) и inline math ($...$)
+    // Обычный текст оборачиваем в \text{...}
     const parts: (string | JSX.Element)[] = []
     let lastIndex = 0
     let key = 0
 
     // Обработка block math ($$...$$) - поддерживаем многострочные формулы
-    // Используем более гибкий regex, который учитывает переносы строк
     const blockMathRegex = /\$\$([\s\S]*?)\$\$/g
     let match
     const blockMatches: Array<{start: number, end: number, content: string}> = []
@@ -311,8 +367,11 @@ function ReasoningComparison() {
           )
         }
       } catch (e) {
-        // Если LaTeX невалидный, показываем как есть
-        parts.push(`$$${blockMatch.content}$$`)
+        // Если LaTeX невалидный, оборачиваем в \text
+        const escapedContent = blockMatch.content.replace(/\\/g, '\\textbackslash{}').replace(/{/g, '\\{').replace(/}/g, '\\}')
+        parts.push(
+          <BlockMath key={`block-${key}-${blockMatch.start}`} math={`\\text{${escapedContent}}`} />
+        )
       }
       lastIndex = blockMatch.end
       key++
@@ -323,7 +382,60 @@ function ReasoningComparison() {
       parts.push(...renderInlineMath(remainingText, key))
     }
 
+    // Если нет частей, оборачиваем весь текст в LaTeX
+    if (parts.length === 0) {
+      return [convertTextToLatex(text, 0)]
+    }
+
     return parts.length > 0 ? parts : [text]
+  }
+
+  const convertTextToLatex = (text: string, startKey: number): JSX.Element => {
+    if (!text.trim()) {
+      return <span key={`text-${startKey}`}></span>
+    }
+    
+    // Экранируем специальные символы LaTeX
+    const escapeLatex = (str: string): string => {
+      return str
+        .replace(/\\/g, '\\textbackslash{}')
+        .replace(/{/g, '\\{')
+        .replace(/}/g, '\\}')
+        .replace(/#/g, '\\#')
+        .replace(/\$/g, '\\$')
+        .replace(/%/g, '\\%')
+        .replace(/&/g, '\\&')
+        .replace(/\^/g, '\\textasciicircum{}')
+        .replace(/_/g, '\\_')
+    }
+    
+    // Разбиваем на строки и обрабатываем каждую
+    const lines = text.split('\n')
+    const processedLines = lines
+      .map(line => line.trim())
+      .filter(line => line.length > 0)
+      .map(line => escapeLatex(line))
+    
+    if (processedLines.length === 0) {
+      return <span key={`text-${startKey}`}></span>
+    }
+    
+    // Для одной строки используем InlineMath, для нескольких - BlockMath
+    // Объединяем строки через \text{} для каждой строки
+    const latexContent = processedLines
+      .map(line => `\\text{${line}}`)
+      .join(' \\\\ ')
+    
+    try {
+      if (processedLines.length === 1 && text.split('\n').length === 1) {
+        return <InlineMath key={`latex-inline-${startKey}`} math={latexContent} />
+      } else {
+        return <BlockMath key={`latex-block-${startKey}`} math={latexContent} />
+      }
+    } catch (e) {
+      // Если не удалось, возвращаем как есть
+      return <span key={`text-${startKey}`}>{text}</span>
+    }
   }
 
   const renderInlineMath = (text: string, startKey: number): (string | JSX.Element)[] => {
@@ -331,7 +443,6 @@ function ReasoningComparison() {
     
     const parts: (string | JSX.Element)[] = []
     // Улучшенный regex для inline math - учитываем, что $ может быть частью формулы
-    // Исключаем случаи, когда $ стоит в начале строки или после пробела (это может быть block math)
     const inlineMathRegex = /(?<!\$)\$(?!\$)([^$\n]+?)\$(?!\$)/g
     let lastIndex = 0
     let key = startKey
@@ -356,7 +467,12 @@ function ReasoningComparison() {
     // Обрабатываем совпадения
     for (const mathMatch of matches) {
       if (mathMatch.start > lastIndex) {
-        parts.push(text.slice(lastIndex, mathMatch.start))
+        // Обычный текст оборачиваем в LaTeX \text{}
+        const plainText = text.slice(lastIndex, mathMatch.start)
+        if (plainText.trim()) {
+          parts.push(convertTextToLatex(plainText, key))
+          key++
+        }
       }
       try {
         const mathContent = mathMatch.content.trim()
@@ -366,18 +482,24 @@ function ReasoningComparison() {
           )
         }
       } catch (e) {
-        // Если LaTeX невалидный, показываем как есть
-        parts.push(`$${mathMatch.content}$`)
+        // Если LaTeX невалидный, оборачиваем в \text
+        const escapedContent = mathMatch.content.replace(/\\/g, '\\textbackslash{}').replace(/{/g, '\\{').replace(/}/g, '\\}')
+        parts.push(
+          <InlineMath key={`inline-${key}-${mathMatch.start}`} math={`\\text{${escapedContent}}`} />
+        )
       }
       lastIndex = mathMatch.end
       key++
     }
 
     if (lastIndex < text.length) {
-      parts.push(text.slice(lastIndex))
+      const remainingText = text.slice(lastIndex)
+      if (remainingText.trim()) {
+        parts.push(convertTextToLatex(remainingText, key))
+      }
     }
 
-    return parts.length > 0 ? parts : [text]
+    return parts.length > 0 ? parts : [convertTextToLatex(text, startKey)]
   }
 
   return (
@@ -446,6 +568,25 @@ function ReasoningComparison() {
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {(comparison || isGeneratingComparison) && (
+          <div className="comparison-section">
+            <h2>Сравнение ответов</h2>
+            <div className="comparison-content">
+              {isGeneratingComparison ? (
+                <div className="loading-container">
+                  <div className="loading-indicator">
+                    Генерация сравнения...
+                  </div>
+                </div>
+              ) : (
+                <div className="comparison-text">
+                  {comparison ? renderMath(comparison) : ''}
+                </div>
+              )}
             </div>
           </div>
         )}

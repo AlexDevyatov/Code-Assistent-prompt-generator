@@ -292,3 +292,46 @@
   }
 }
 
+.comparison-section {
+  margin-top: 40px;
+  margin-bottom: 40px;
+}
+
+.comparison-section h2 {
+  font-size: 2rem;
+  color: #333;
+  margin-bottom: 24px;
+  text-align: center;
+  position: sticky;
+  top: 0;
+  background-color: #f5f5f5;
+  padding: 20px 0;
+  z-index: 10;
+  margin-top: 0;
+  border-bottom: 2px solid #e0e0e0;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.comparison-content {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  width: 100%;
+  max-width: 100%;
+}
+
+.comparison-text {
+  line-height: 1.8;
+  color: #333;
+  font-size: 16px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+@media (max-width: 768px) {
+  .comparison-content {
+    padding: 16px;
+  }
+}
+
