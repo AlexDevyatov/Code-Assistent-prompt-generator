@@ -270,14 +270,14 @@ function SystemPromptTest() {
 
         <div className="system-prompt-section sticky-section">
           <div className="system-prompt-header">
-            <h2>System Prompt</h2>
+            <h2>⚙️ System Prompt</h2>
             <div className="system-prompt-actions">
               <button
                 type="button"
                 onClick={() => setShowSystemPromptEditor(!showSystemPromptEditor)}
                 className="toggle-button"
               >
-                {showSystemPromptEditor ? 'Скрыть' : 'Показать'}
+                {showSystemPromptEditor ? '▼ Скрыть редактор' : '▶ Показать редактор'}
               </button>
             </div>
           </div>
@@ -286,7 +286,7 @@ function SystemPromptTest() {
             <form onSubmit={handleSystemPromptSubmit} className="system-prompt-form">
               <div className="system-prompt-editor">
                 <label htmlFor="system-prompt-input" className="system-prompt-label">
-                  Новый System Prompt:
+                  ✏️ Введите новый System Prompt здесь:
                 </label>
                 <textarea
                   id="system-prompt-input"
@@ -294,7 +294,7 @@ function SystemPromptTest() {
                   value={systemPrompt}
                   onChange={(e) => setSystemPrompt(e.target.value)}
                   onKeyDown={handleSystemPromptKeyDown}
-                  placeholder="Введите system prompt для агента..."
+                  placeholder="Например: Ты — полезный ассистент. Отвечай кратко и по делу."
                   rows={4}
                   disabled={isLoading}
                   className="system-prompt-textarea"
@@ -305,7 +305,7 @@ function SystemPromptTest() {
                     disabled={systemPrompt.trim() === currentSystemPrompt.trim() || isLoading}
                     className="change-prompt-button"
                   >
-                    Применить System Prompt (Ctrl+Enter)
+                    ✅ Применить System Prompt (Ctrl+Enter)
                   </button>
                   <button
                     type="button"
@@ -314,13 +314,13 @@ function SystemPromptTest() {
                     className="reset-prompt-button"
                     title="Сбросить к текущему значению"
                   >
-                    Сбросить
+                    ↺ Сбросить
                   </button>
                 </div>
               </div>
               <div className="current-prompt-info">
                 <div className="current-prompt-header">
-                  <span className="current-prompt-label">Текущий активный System Prompt:</span>
+                  <span className="current-prompt-label">📌 Текущий активный System Prompt:</span>
                   <button
                     type="button"
                     onClick={handleCopySystemPrompt}
@@ -333,6 +333,11 @@ function SystemPromptTest() {
                 <div className="current-prompt-text">{currentSystemPrompt}</div>
               </div>
             </form>
+          )}
+          {!showSystemPromptEditor && (
+            <div className="system-prompt-collapsed-hint">
+              Нажмите "Показать редактор" выше, чтобы изменить System Prompt
+            </div>
           )}
         </div>
 

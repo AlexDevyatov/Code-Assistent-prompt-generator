@@ -11,8 +11,9 @@
   padding: 12px 20px;
   position: sticky;
   top: 0;
-  z-index: 100;
+  z-index: 1000;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  flex-shrink: 0;
 }
 
 .nav-link {
@@ -36,6 +37,7 @@
   margin: 0 auto;
   width: 100%;
   padding: 20px;
+  padding-top: 20px;
   padding-bottom: 120px;
   overflow-y: auto;
   height: 100%;
@@ -84,14 +86,25 @@
   padding: 24px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   margin-bottom: 24px;
+  border: 2px solid #007bff;
 }
 
 .system-prompt-section.sticky-section {
   position: sticky;
   top: 60px;
-  z-index: 10;
-  margin-top: 0;
+  z-index: 50;
+  margin-top: 10px;
   margin-bottom: 24px;
+}
+
+.system-prompt-collapsed-hint {
+  padding: 16px;
+  background-color: #e7f3ff;
+  border-radius: 8px;
+  color: #0066cc;
+  text-align: center;
+  font-size: 14px;
+  border: 1px dashed #007bff;
 }
 
 .system-prompt-header {
@@ -165,10 +178,10 @@
 }
 
 .system-prompt-label {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
-  color: #333;
-  margin-bottom: 4px;
+  color: #007bff;
+  margin-bottom: 8px;
   display: block;
 }
 
@@ -208,18 +221,21 @@
 .system-prompt-textarea {
   width: 100%;
   padding: 12px;
-  border: 2px solid #e0e0e0;
+  border: 2px solid #007bff;
   border-radius: 8px;
   font-size: 14px;
   font-family: inherit;
   resize: vertical;
-  min-height: 80px;
-  transition: border-color 0.2s;
+  min-height: 100px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  background-color: #fafafa;
 }
 
 .system-prompt-textarea:focus {
   outline: none;
-  border-color: #007bff;
+  border-color: #0056b3;
+  box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+  background-color: #ffffff;
 }
 
 .system-prompt-textarea:disabled {
@@ -687,6 +703,11 @@
   .system-prompt-section.sticky-section {
     position: relative;
     top: 0;
+    margin-top: 10px;
+  }
+
+  .system-prompt-test-container {
+    padding-top: 10px;
   }
 
   .scroll-to-bottom-button {
