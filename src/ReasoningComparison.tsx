@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { InlineMath, BlockMath } from 'react-katex'
 import 'katex/dist/katex.min.css'
@@ -19,14 +19,6 @@ function ReasoningComparison() {
   const [task, setTask] = useState('')
   const [results, setResults] = useState<ReasoningResult[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
-  const resultsEndRef = useRef<HTMLDivElement>(null)
-
-  const scrollToBottom = () => {
-    resultsEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }
-
-  // Убрана автоматическая прокрутка во время генерации
-  // Прокрутка происходит только при завершении или по запросу пользователя
 
   const callAPIStream = async (
     resultId: string,
@@ -119,10 +111,6 @@ function ReasoningComparison() {
             : r
         )
       )
-      // Прокрутка только после завершения генерации конкретного результата
-      setTimeout(() => {
-        scrollToBottom()
-      }, 100)
     } catch (error) {
       setResults((prev) =>
         prev.map((r) =>
@@ -442,7 +430,6 @@ function ReasoningComparison() {
                 </div>
               ))}
             </div>
-            <div ref={resultsEndRef} />
           </div>
         )}
 
