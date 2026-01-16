@@ -274,18 +274,20 @@ function ReasoningComparison() {
   const renderMath = (text: string) => {
     if (!text) return ['']
     
-    // Простой парсер для LaTeX формул
-    // Ищем блоки $...$ для inline и $$...$$ для block
+    // Улучшенный парсер для LaTeX формул
+    // Обрабатываем block math ($$...$$) и inline math ($...$)
     const parts: (string | JSX.Element)[] = []
     let lastIndex = 0
     let key = 0
 
-    // Обработка block math ($$...$$) - ищем полные пары
-    const blockMathRegex = /\$\$([^$]+)\$\$/g
+    // Обработка block math ($$...$$) - поддерживаем многострочные формулы
+    // Используем более гибкий regex, который учитывает переносы строк
+    const blockMathRegex = /\$\$([\s\S]*?)\$\$/g
     let match
     const blockMatches: Array<{start: number, end: number, content: string}> = []
 
     // Собираем все полные блоки
+    blockMathRegex.lastIndex = 0
     while ((match = blockMathRegex.exec(text)) !== null) {
       blockMatches.push({
         start: match.index,
@@ -302,9 +304,12 @@ function ReasoningComparison() {
         key += beforeText.length
       }
       try {
-        parts.push(
-          <BlockMath key={`block-${key}-${blockMatch.start}`} math={blockMatch.content.trim()} />
-        )
+        const mathContent = blockMatch.content.trim()
+        if (mathContent) {
+          parts.push(
+            <BlockMath key={`block-${key}-${blockMatch.start}`} math={mathContent} />
+          )
+        }
       } catch (e) {
         // Если LaTeX невалидный, показываем как есть
         parts.push(`$$${blockMatch.content}$$`)
@@ -325,19 +330,27 @@ function ReasoningComparison() {
     if (!text) return []
     
     const parts: (string | JSX.Element)[] = []
-    const inlineMathRegex = /\$([^$\n]+)\$/g
+    // Улучшенный regex для inline math - учитываем, что $ может быть частью формулы
+    // Исключаем случаи, когда $ стоит в начале строки или после пробела (это может быть block math)
+    const inlineMathRegex = /(?<!\$)\$(?!\$)([^$\n]+?)\$(?!\$)/g
     let lastIndex = 0
     let key = startKey
 
     // Собираем все совпадения
     const matches: Array<{start: number, end: number, content: string}> = []
     let match
+    inlineMathRegex.lastIndex = 0
     while ((match = inlineMathRegex.exec(text)) !== null) {
-      matches.push({
-        start: match.index,
-        end: match.index + match[0].length,
-        content: match[1]
-      })
+      // Проверяем, что это не часть block math ($$...$$)
+      const beforeChar = match.index > 0 ? text[match.index - 1] : ''
+      const afterChar = match.index + match[0].length < text.length ? text[match.index + match[0].length] : ''
+      if (beforeChar !== '$' && afterChar !== '$') {
+        matches.push({
+          start: match.index,
+          end: match.index + match[0].length,
+          content: match[1]
+        })
+      }
     }
 
     // Обрабатываем совпадения
@@ -346,9 +359,12 @@ function ReasoningComparison() {
         parts.push(text.slice(lastIndex, mathMatch.start))
       }
       try {
-        parts.push(
-          <InlineMath key={`inline-${key}-${mathMatch.start}`} math={mathMatch.content.trim()} />
-        )
+        const mathContent = mathMatch.content.trim()
+        if (mathContent) {
+          parts.push(
+            <InlineMath key={`inline-${key}-${mathMatch.start}`} math={mathContent} />
+          )
+        }
       } catch (e) {
         // Если LaTeX невалидный, показываем как есть
         parts.push(`$${mathMatch.content}$`)
