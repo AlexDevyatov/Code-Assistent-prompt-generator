@@ -140,9 +140,40 @@ sudo systemctl start deepseek-web-client
 sudo systemctl status deepseek-web-client
 ```
 
-## Шаг 7: Проверка работы
+## Шаг 7: Отключение Nginx (если установлен)
 
-1. Откройте браузер и перейдите на `http://ваш-ip:8000`
+**Важно:** Этот проект работает напрямую через FastAPI на порту 8000, **без использования Nginx**.
+
+Если на сервере установлен Nginx и он мешает работе приложения, используйте скрипт:
+
+```bash
+cd /opt/deepseek-web-client
+./disable_nginx.sh
+```
+
+Или выполните вручную:
+
+```bash
+# Остановите Nginx
+sudo systemctl stop nginx
+
+# Отключите автозапуск Nginx
+sudo systemctl disable nginx
+
+# Удалите конфигурацию для этого проекта (если есть)
+sudo rm -f /etc/nginx/sites-enabled/deepseek-web-client
+sudo rm -f /etc/nginx/sites-available/deepseek-web-client
+```
+
+**Примечание:** Если Nginx используется для других сервисов, просто удалите конфигурацию для этого проекта. Если Nginx не нужен вообще, можно удалить его полностью:
+```bash
+sudo apt remove nginx nginx-common -y
+sudo apt autoremove -y
+```
+
+## Шаг 8: Проверка работы
+
+1. Откройте браузер и перейдите на `http://ваш-ip:8000` (напрямую, без Nginx)
 2. Проверьте, что интерфейс загружается
 3. Отправьте тестовый запрос
 4. Проверьте логи:
@@ -150,6 +181,9 @@ sudo systemctl status deepseek-web-client
 ```bash
 # Логи systemd сервиса
 sudo journalctl -u deepseek-web-client -f
+
+# Или проверьте health endpoint
+curl http://localhost:8000/api/health
 ```
 
 ## Обновление приложения
@@ -201,7 +235,44 @@ npm run build
 sudo systemctl restart deepseek-web-client
 ```
 
+## Диагностика проблем
+
+Для быстрой проверки состояния сервера используйте скрипт диагностики:
+
+```bash
+cd /opt/deepseek-web-client
+python3 check_server.py
+```
+
+Скрипт проверит:
+- ✅ Наличие переменных окружения
+- ✅ Установленные зависимости
+- ✅ Наличие статических файлов
+- ✅ Доступность порта
+
+Также можно проверить health endpoint:
+
+```bash
+curl http://localhost:8000/api/health
+```
+
 ## Устранение неполадок
+
+### Ошибка 500 от Nginx
+
+Если вы видите ошибку "500 Internal Server Error" от nginx, это означает, что Nginx все еще проксирует запросы, но FastAPI не отвечает или не запущен.
+
+**Решение:**
+1. Отключите Nginx (см. Шаг 7 выше)
+2. Убедитесь, что FastAPI сервис запущен:
+   ```bash
+   sudo systemctl status deepseek-web-client
+   ```
+3. Проверьте, что сервис слушает на порту 8000:
+   ```bash
+   sudo netstat -tulpn | grep 8000
+   ```
+4. Обращайтесь напрямую к FastAPI на порту 8000: `http://ваш-ip:8000`
 
 ### Сервис не запускается
 
