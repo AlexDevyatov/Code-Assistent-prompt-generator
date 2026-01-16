@@ -37,7 +37,7 @@ static_dir.mkdir(exist_ok=True)
 
 DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions"
 API_KEY = os.getenv("DEEPSEEK_API_KEY")
-MAX_TOKENS = int(os.getenv("MAX_TOKENS", "4096"))  # Ограничение на вывод, по умолчанию 4096
+MAX_TOKENS = int(os.getenv("MAX_TOKENS", "1000"))  # Ограничение на вывод, по умолчанию 1000
 
 if not API_KEY:
     raise ValueError("DEEPSEEK_API_KEY not found in environment variables")
