@@ -160,6 +160,16 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
+.summarizer-card {
+  border: 2px solid #28a745;
+  background: linear-gradient(to bottom, #ffffff, #f8fff9);
+}
+
+.summarizer-card .result-header h3 {
+  color: #28a745;
+  font-weight: 700;
+}
+
 .result-header {
   border-bottom: 2px solid #f0f0f0;
   padding-bottom: 12px;

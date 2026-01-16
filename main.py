@@ -37,6 +37,7 @@ static_dir.mkdir(exist_ok=True)
 
 DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions"
 API_KEY = os.getenv("DEEPSEEK_API_KEY")
+MAX_TOKENS = int(os.getenv("MAX_TOKENS", "4096"))  # Ограничение на вывод, по умолчанию 4096
 
 if not API_KEY:
     raise ValueError("DEEPSEEK_API_KEY not found in environment variables")
@@ -79,6 +80,7 @@ async def chat_stream(request: ChatRequest):
             "model": "deepseek-chat",
             "messages": messages,
             "temperature": 0.3,
+            "max_tokens": MAX_TOKENS,
             "stream": True
         }
         
@@ -149,7 +151,8 @@ async def chat(request: ChatRequest):
         payload = {
             "model": "deepseek-chat",
             "messages": messages,
-            "temperature": 0.3
+            "temperature": 0.3,
+            "max_tokens": MAX_TOKENS
         }
         
         logger.info(f"Sending request to DeepSeek API with {len(messages)} messages")

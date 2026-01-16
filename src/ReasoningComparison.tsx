@@ -268,6 +268,64 @@ function ReasoningComparison() {
     // Запускаем обработку всех методов параллельно
     await Promise.all(initialResults.map(processMethod))
 
+    // Небольшая задержка для обновления состояния React
+    await new Promise(resolve => setTimeout(resolve, 300))
+
+    // После завершения всех методов запускаем суммаризатор
+    // Получаем актуальные результаты из состояния
+    let allResultsForComparison: ReasoningResult[] = []
+    setResults((prevResults) => {
+      allResultsForComparison = prevResults.filter(r => r.response && !r.error && r.id !== 'summarizer')
+      return prevResults
+    })
+
+    // Дополнительная задержка для гарантии обновления состояния
+    await new Promise(resolve => setTimeout(resolve, 100))
+
+    if (allResultsForComparison.length > 0) {
+      // Создаем результат для суммаризатора
+      const summarizerResult: ReasoningResult = {
+        id: 'summarizer',
+        method: 'Сравнение и анализ ответов',
+        prompt: task,
+        response: '',
+        isLoading: true,
+      }
+      
+      setResults((prev) => [...prev, summarizerResult])
+
+      // Формируем промпт для суммаризатора
+      const comparisonPrompt = `Проанализируй и сравни следующие ответы на задачу "${task}":
+
+${allResultsForComparison.map((r, idx) => `Метод ${idx + 1}: ${r.method}
+Ответ:
+${r.response}
+
+---`).join('\n\n')}
+
+Задача: Сравни все ответы и предоставь:
+1. Краткое резюме каждого подхода
+2. Сравнение качества и полноты ответов
+3. Выявление общих моментов и различий
+4. Оценку, какой метод дал наиболее точный/полный ответ
+5. Рекомендации по использованию методов
+
+ОБЯЗАТЕЛЬНО: Все математические формулы, уравнения, выражения и символы должны быть строго в формате LaTeX. Используй синтаксис LaTeX: $...$ для inline формул и $$...$$ для блочных формул.`
+
+      const latexInstruction = '\n\nВАЖНО: Все математические формулы, уравнения, выражения и символы должны быть строго в формате LaTeX. Используй синтаксис LaTeX: $...$ для inline формул и $$...$$ для блочных формул.'
+
+      // Запускаем суммаризатор
+      try {
+        await callAPIStream(
+          'summarizer',
+          comparisonPrompt + latexInstruction,
+          'Ты — эксперт-аналитик, специализирующийся на сравнении и оценке различных подходов к решению задач. Твоя задача — объективно сравнить ответы и выделить их сильные и слабые стороны. ОБЯЗАТЕЛЬНО используй LaTeX для всех математических формул.'
+        )
+      } catch (error) {
+        console.error('Ошибка при работе суммаризатора:', error)
+      }
+    }
+
     setIsProcessing(false)
   }
 
@@ -545,7 +603,7 @@ function ReasoningComparison() {
             <h2>Результаты сравнения</h2>
             <div className="results-grid">
               {results.map((result) => (
-                <div key={result.id} className="result-card">
+                <div key={result.id} className={`result-card ${result.id === 'summarizer' ? 'summarizer-card' : ''}`}>
                   <div className="result-header">
                     <h3>{result.method}</h3>
                   </div>
