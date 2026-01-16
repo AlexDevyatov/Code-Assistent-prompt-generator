@@ -20,6 +20,12 @@ function Home() {
               <p>Сравнение разных методов решения задач с помощью ИИ</p>
             </div>
           </Link>
+          <Link to="/system-prompt" className="home-link">
+            <div className="home-link-card">
+              <h2>День 5. System Prompt</h2>
+              <p>Тестирование и сравнение реакций агента при изменении System Prompt в ходе диалога</p>
+            </div>
+          </Link>
         </div>
       </div>
     </div>
