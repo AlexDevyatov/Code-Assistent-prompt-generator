@@ -39,11 +39,11 @@ npm --version
 cd /opt  # или /var/www, или любая другая
 
 # Клонируйте репозиторий
-sudo git clone <ваш-репозиторий> deepseek-web-client
-cd deepseek-web-client
+sudo git clone <ваш-репозиторий> Code-Assistent-prompt-generator
+cd Code-Assistent-prompt-generator
 
 # Установите права доступа
-sudo chown -R $USER:$USER /opt/deepseek-web-client
+sudo chown -R $USER:$USER /opt/Code-Assistent-prompt-generator
 ```
 
 ## Шаг 3: Установка зависимостей
@@ -110,9 +110,9 @@ After=network.target
 [Service]
 Type=simple
 User=www-data
-WorkingDirectory=/opt/deepseek-web-client
-Environment="PATH=/opt/deepseek-web-client/venv/bin"
-ExecStart=/opt/deepseek-web-client/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
+WorkingDirectory=/opt/Code-Assistent-prompt-generator
+Environment="PATH=/opt/Code-Assistent-prompt-generator/venv/bin"
+ExecStart=/opt/Code-Assistent-prompt-generator/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
 Restart=always
 RestartSec=10
 
@@ -122,7 +122,7 @@ WantedBy=multi-user.target
 
 **Важно:** Замените:
 - `User=www-data` на вашего пользователя (или оставьте www-data)
-- `/opt/deepseek-web-client` на путь к вашему проекту
+- `/opt/Code-Assistent-prompt-generator` на путь к вашему проекту (если отличается)
 
 Активируйте и запустите сервис:
 
@@ -147,7 +147,7 @@ sudo systemctl status deepseek-web-client
 Если на сервере установлен Nginx и он мешает работе приложения, используйте скрипт:
 
 ```bash
-cd /opt/deepseek-web-client
+cd /opt/Code-Assistent-prompt-generator
 ./disable_nginx.sh
 ```
 
@@ -193,7 +193,7 @@ curl http://localhost:8000/api/health
 Используйте скрипт `deploy.sh` для автоматического обновления:
 
 ```bash
-cd /opt/deepseek-web-client
+cd /opt/Code-Assistent-prompt-generator
 
 # Базовое использование
 ./deploy.sh
@@ -218,7 +218,7 @@ cd /opt/deepseek-web-client
 Если нужно обновить вручную:
 
 ```bash
-cd /opt/deepseek-web-client
+cd /opt/Code-Assistent-prompt-generator
 
 # Получите последние изменения
 git pull
@@ -242,7 +242,7 @@ sudo systemctl restart deepseek-web-client
 Для полной диагностики проблем с доступностью используйте скрипт:
 
 ```bash
-cd /opt/deepseek-web-client
+cd /opt/Code-Assistent-prompt-generator
 ./diagnose_server.sh
 ```
 
@@ -261,7 +261,7 @@ cd /opt/deepseek-web-client
 Для быстрой проверки состояния сервера:
 
 ```bash
-cd /opt/deepseek-web-client
+cd /opt/Code-Assistent-prompt-generator
 python3 check_server.py
 ```
 
@@ -329,7 +329,7 @@ curl http://localhost:8000/api/health
 
 **Автоматическое исправление:**
 ```bash
-cd /opt/deepseek-web-client
+cd /opt/Code-Assistent-prompt-generator
 ./fix_service.sh
 ```
 
@@ -346,10 +346,10 @@ cd /opt/deepseek-web-client
 sudo journalctl -u deepseek-web-client -n 50
 
 # 2. Проверьте, существует ли uvicorn
-ls -la /opt/deepseek-web-client/venv/bin/uvicorn
+ls -la /opt/Code-Assistent-prompt-generator/venv/bin/uvicorn
 
 # 3. Если нет, создайте venv и установите зависимости
-cd /opt/deepseek-web-client
+cd /opt/Code-Assistent-prompt-generator
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
@@ -357,7 +357,7 @@ deactivate
 
 # 4. Проверьте конфигурацию systemd
 sudo cat /etc/systemd/system/deepseek-web-client.service | grep ExecStart
-# Должно быть: ExecStart=/opt/deepseek-web-client/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
+# Должно быть: ExecStart=/opt/Code-Assistent-prompt-generator/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
 
 # 5. Если пути неправильные, обновите файл
 sudo nano /etc/systemd/system/deepseek-web-client.service
@@ -379,13 +379,13 @@ sudo journalctl -u deepseek-web-client -n 50
 sudo netstat -tulpn | grep 8000
 
 # Проверьте права доступа к файлам
-ls -la /opt/deepseek-web-client
+ls -la /opt/Code-Assistent-prompt-generator
 ```
 
 ### Статические файлы не загружаются
 
 - Убедитесь, что папка `static/` существует и содержит файлы
-- Проверьте права доступа: `sudo chown -R www-data:www-data /opt/deepseek-web-client/static`
+- Проверьте права доступа: `sudo chown -R www-data:www-data /opt/Code-Assistent-prompt-generator/static`
 
 ### API запросы не работают
 
@@ -459,7 +459,7 @@ ls -la /opt/deepseek-web-client
    ```
    И изменить ExecStart в systemd:
    ```ini
-   ExecStart=/opt/deepseek-web-client/venv/bin/gunicorn main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
+   ExecStart=/opt/Code-Assistent-prompt-generator/venv/bin/gunicorn main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
    ```
 
 2. Использовать CDN для статических файлов

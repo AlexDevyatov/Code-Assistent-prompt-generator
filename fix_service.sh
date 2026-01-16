@@ -4,7 +4,7 @@
 # Использование: ./fix_service.sh
 
 SYSTEMD_FILE="/etc/systemd/system/deepseek-web-client.service"
-PROJECT_DIR="/opt/deepseek-web-client"
+PROJECT_DIR="/opt/Code-Assistent-prompt-generator"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
