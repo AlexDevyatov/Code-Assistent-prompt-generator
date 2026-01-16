@@ -2,6 +2,8 @@
   min-height: 100vh;
   background-color: #f5f5f5;
   padding-bottom: 40px;
+  overflow-y: auto;
+  height: 100vh;
 }
 
 .nav-bar {
@@ -31,6 +33,7 @@
   max-width: 1200px;
   margin: 0 auto;
   padding: 40px 20px;
+  width: 100%;
 }
 
 .reasoning-header {
@@ -122,11 +125,18 @@
   color: #333;
   margin-bottom: 24px;
   text-align: center;
+  position: sticky;
+  top: 60px;
+  background-color: #f5f5f5;
+  padding: 20px 0;
+  z-index: 10;
+  margin-top: -20px;
+  padding-top: 40px;
 }
 
 .results-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+  display: flex;
+  flex-direction: column;
   gap: 24px;
   margin-bottom: 40px;
 }
@@ -137,6 +147,8 @@
   padding: 24px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   transition: box-shadow 0.2s;
+  width: 100%;
+  max-width: 100%;
 }
 
 .result-card:hover {
@@ -158,6 +170,7 @@
 
 .result-content {
   min-height: 100px;
+  max-height: none;
 }
 
 .result-text {
@@ -232,7 +245,6 @@
   }
 
   .results-grid {
-    grid-template-columns: 1fr;
     gap: 16px;
   }
 
