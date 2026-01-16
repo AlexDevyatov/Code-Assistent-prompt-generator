@@ -194,19 +194,22 @@ function ReasoningComparison() {
 
     setResults(initialResults)
 
+    // Константа с инструкцией по LaTeX
+    const latexInstruction = '\n\nВАЖНО: Все математические формулы, уравнения, выражения и символы должны быть строго в формате LaTeX. Используй синтаксис LaTeX: $...$ для inline формул и $$...$$ для блочных формул. Например: $x^2 + 5x + 6 = 0$ или $$\\int_0^1 x^2 dx = \\frac{1}{3}$$'
+
     // Обрабатываем каждый метод с использованием streaming
     const processMethod = async (result: ReasoningResult) => {
       try {
         if (result.id === 'direct') {
           // Прямой ответ
-          await callAPIStream(result.id, task)
+          await callAPIStream(result.id, task + latexInstruction)
         } else if (result.id === 'stepwise') {
           // Пошаговое решение
-          await callAPIStream(result.id, `${task}\n\nРешай пошагово, объясняя каждый шаг.`)
+          await callAPIStream(result.id, `${task}${latexInstruction}\n\nРешай пошагово, объясняя каждый шаг.`)
         } else if (result.id === 'prompt-engineering') {
           // Для этого метода нужен двухэтапный процесс
           // Сначала получаем промпт (не streaming, т.к. короткий)
-          const promptPrompt = `Создай оптимальный промпт для решения следующей задачи, который поможет получить наиболее точный и полный ответ. Отвечай только промптом, без дополнительных пояснений.\n\nЗадача: ${task}`
+          const promptPrompt = `Создай оптимальный промпт для решения следующей задачи, который поможет получить наиболее точный и полный ответ. Промпт должен включать требование использовать LaTeX для всех математических формул. Отвечай только промптом, без дополнительных пояснений.\n\nЗадача: ${task}`
           
           // Получаем промпт обычным способом
           const res = await fetch('/api/chat', {
@@ -223,7 +226,7 @@ function ReasoningComparison() {
           const generatedPrompt = data.response
           
           // Затем используем streaming для решения задачи
-          await callAPIStream(result.id, generatedPrompt)
+          await callAPIStream(result.id, generatedPrompt + latexInstruction)
           
           // Обновляем результат с информацией о промпте
           setResults((prev) =>
@@ -240,22 +243,22 @@ function ReasoningComparison() {
           // Эксперт-математик
           await callAPIStream(
             result.id,
-            task,
-            'Ты — опытный математик с глубокими знаниями в алгебре, геометрии и математическом анализе. Реши задачу, показав все математические выкладки и обоснования.'
+            task + latexInstruction,
+            'Ты — опытный математик с глубокими знаниями в алгебре, геометрии и математическом анализе. Реши задачу, показав все математические выкладки и обоснования. Все формулы должны быть в формате LaTeX.'
           )
         } else if (result.id === 'expert-2') {
           // Эксперт-логик
           await callAPIStream(
             result.id,
-            task,
-            'Ты — эксперт по логике и дедуктивному мышлению. Реши задачу, используя логические рассуждения и пошаговый анализ.'
+            task + latexInstruction,
+            'Ты — эксперт по логике и дедуктивному мышлению. Реши задачу, используя логические рассуждения и пошаговый анализ. Если в задаче есть математические элементы, используй LaTeX для их записи.'
           )
         } else if (result.id === 'expert-3') {
           // Эксперт-аналитик
           await callAPIStream(
             result.id,
-            task,
-            'Ты — аналитик, специализирующийся на комплексном анализе проблем. Реши задачу, рассмотрев её с разных углов и предложив наиболее эффективное решение.'
+            task + latexInstruction,
+            'Ты — аналитик, специализирующийся на комплексном анализе проблем. Реши задачу, рассмотрев её с разных углов и предложив наиболее эффективное решение. Все математические формулы должны быть в формате LaTeX.'
           )
         }
       } catch (error) {
