@@ -42,4 +42,6 @@ Thumbs.db
 
 # Logs
 *.log
+logs/
+static_backup_*/
 

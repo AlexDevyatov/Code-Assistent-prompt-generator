@@ -5,8 +5,6 @@
 - Ubuntu 20.04+ / Debian 11+ (или другой Linux дистрибутив)
 - Python 3.9+
 - Node.js 18+ и npm
-- Nginx (опционально, для проксирования)
-- SSL сертификат (опционально, для HTTPS)
 
 ## Шаг 1: Подготовка сервера
 
@@ -142,112 +140,9 @@ sudo systemctl start deepseek-web-client
 sudo systemctl status deepseek-web-client
 ```
 
-## Шаг 7: Настройка Nginx (рекомендуется)
+## Шаг 7: Проверка работы
 
-### Установка Nginx
-
-```bash
-sudo apt install nginx -y
-```
-
-### Создание конфигурации
-
-```bash
-sudo nano /etc/nginx/sites-available/deepseek-web-client
-```
-
-Добавьте следующую конфигурацию:
-
-```nginx
-server {
-    listen 80;
-    server_name ваш-домен.com;  # Замените на ваш домен или IP
-
-    # Максимальный размер тела запроса (для больших промптов)
-    client_max_body_size 10M;
-
-    # Проксирование API запросов на FastAPI
-    location /api {
-        proxy_pass http://127.0.0.1:8000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_cache_bypass $http_upgrade;
-        
-        # Таймауты для долгих запросов
-        proxy_connect_timeout 60s;
-        proxy_send_timeout 60s;
-        proxy_read_timeout 60s;
-    }
-
-    # Отдача статических файлов фронтенда
-    location / {
-        root /opt/deepseek-web-client/static;
-        try_files $uri $uri/ /index.html;
-        index index.html;
-        
-        # Кэширование статических ресурсов
-        location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
-            expires 1y;
-            add_header Cache-Control "public, immutable";
-        }
-    }
-}
-```
-
-Активируйте конфигурацию:
-
-```bash
-# Создайте символическую ссылку
-sudo ln -s /etc/nginx/sites-available/deepseek-web-client /etc/nginx/sites-enabled/
-
-# Проверьте конфигурацию
-sudo nginx -t
-
-# Перезагрузите Nginx
-sudo systemctl reload nginx
-```
-
-## Шаг 8: Настройка SSL (опционально, но рекомендуется)
-
-### Использование Let's Encrypt (Certbot)
-
-```bash
-# Установите Certbot
-sudo apt install certbot python3-certbot-nginx -y
-
-# Получите сертификат
-sudo certbot --nginx -d ваш-домен.com
-
-# Настройте автообновление
-sudo certbot renew --dry-run
-```
-
-Certbot автоматически обновит конфигурацию Nginx для использования HTTPS.
-
-## Шаг 9: Настройка файрвола
-
-```bash
-# Разрешите HTTP и HTTPS
-sudo ufw allow 'Nginx Full'
-# или отдельно:
-sudo ufw allow 'Nginx HTTP'
-sudo ufw allow 'Nginx HTTPS'
-
-# Если используете напрямую без Nginx:
-sudo ufw allow 8000/tcp
-
-# Включите файрвол
-sudo ufw enable
-```
-
-## Шаг 10: Проверка работы
-
-1. Откройте браузер и перейдите на `http://ваш-домен.com` или `http://ваш-ip`
+1. Откройте браузер и перейдите на `http://ваш-ip:8000`
 2. Проверьте, что интерфейс загружается
 3. Отправьте тестовый запрос
 4. Проверьте логи:
@@ -255,13 +150,38 @@ sudo ufw enable
 ```bash
 # Логи systemd сервиса
 sudo journalctl -u deepseek-web-client -f
-
-# Логи Nginx
-sudo tail -f /var/log/nginx/error.log
-sudo tail -f /var/log/nginx/access.log
 ```
 
 ## Обновление приложения
+
+### Автоматическое обновление (рекомендуется)
+
+Используйте скрипт `deploy.sh` для автоматического обновления:
+
+```bash
+cd /opt/deepseek-web-client
+
+# Базовое использование
+./deploy.sh
+
+# С параметрами
+./deploy.sh --skip-git      # Пропустить git pull
+./deploy.sh --skip-deps     # Пропустить обновление зависимостей
+./deploy.sh --dry-run       # Проверка без применения изменений
+```
+
+Скрипт автоматически:
+- ✅ Получает последние изменения из git
+- ✅ Обновляет Node.js и Python зависимости
+- ✅ Создает бэкап статики перед сборкой
+- ✅ Собирает фронтенд
+- ✅ Перезапускает systemd сервис
+- ✅ Проверяет статус сервисов
+- ✅ Создает лог файл в `logs/deploy_YYYYMMDD_HHMMSS.log`
+
+### Ручное обновление
+
+Если нужно обновить вручную:
 
 ```bash
 cd /opt/deepseek-web-client
@@ -296,31 +216,23 @@ sudo netstat -tulpn | grep 8000
 ls -la /opt/deepseek-web-client
 ```
 
-### Nginx возвращает 502 Bad Gateway
-
-- Убедитесь, что FastAPI сервис запущен: `sudo systemctl status deepseek-web-client`
-- Проверьте, что в Nginx конфигурации правильный адрес: `proxy_pass http://127.0.0.1:8000`
-- Проверьте логи Nginx: `sudo tail -f /var/log/nginx/error.log`
-
 ### Статические файлы не загружаются
 
 - Убедитесь, что папка `static/` существует и содержит файлы
 - Проверьте права доступа: `sudo chown -R www-data:www-data /opt/deepseek-web-client/static`
-- Проверьте путь в Nginx конфигурации
 
 ### API запросы не работают
 
 - Проверьте, что переменная окружения `DEEPSEEK_API_KEY` установлена
 - Проверьте логи FastAPI: `sudo journalctl -u deepseek-web-client -f`
-- Убедитесь, что проксирование настроено правильно в Nginx
+- Убедитесь, что сервис слушает на правильном порту (8000)
 
 ## Безопасность
 
 1. **Не коммитьте `.env` файл** - он уже в `.gitignore`
-2. **Используйте HTTPS** - настройте SSL сертификат
-3. **Ограничьте доступ** - используйте файрвол для ограничения доступа к порту 8000
-4. **Регулярно обновляйте** - обновляйте зависимости и систему
-5. **Используйте сильные пароли** - если добавляете аутентификацию
+2. **Регулярно обновляйте** - обновляйте зависимости и систему
+3. **Используйте сильные пароли** - если добавляете аутентификацию
+4. **Ограничьте доступ** - настройте доступ к порту 8000 только для нужных IP адресов
 
 ## Производительность
 
@@ -335,7 +247,7 @@ ls -la /opt/deepseek-web-client
    ExecStart=/opt/deepseek-web-client/venv/bin/gunicorn main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
    ```
 
-2. Настроить кэширование в Nginx
-3. Использовать CDN для статических файлов
-4. Настроить мониторинг (например, с помощью Prometheus + Grafana)
+2. Использовать CDN для статических файлов
+3. Настроить мониторинг (например, с помощью Prometheus + Grafana)
+
 
