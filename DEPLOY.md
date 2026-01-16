@@ -320,6 +320,57 @@ curl http://localhost:8000/api/health
 
 ### Сервис не запускается
 
+#### Ошибка 203/EXEC (Main process exited, code=exited, status=203/EXEC)
+
+Эта ошибка означает, что systemd не может выполнить команду из ExecStart. Обычно это происходит из-за:
+- Неправильного пути к uvicorn
+- Отсутствия виртуального окружения
+- Неустановленных зависимостей
+
+**Автоматическое исправление:**
+```bash
+cd /opt/deepseek-web-client
+./fix_service.sh
+```
+
+Скрипт автоматически:
+- Проверит и создаст виртуальное окружение
+- Установит зависимости
+- Обновит конфигурацию systemd с правильными путями
+- Проверит права доступа
+- Запустит сервис
+
+**Ручное исправление:**
+```bash
+# 1. Проверьте логи
+sudo journalctl -u deepseek-web-client -n 50
+
+# 2. Проверьте, существует ли uvicorn
+ls -la /opt/deepseek-web-client/venv/bin/uvicorn
+
+# 3. Если нет, создайте venv и установите зависимости
+cd /opt/deepseek-web-client
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+deactivate
+
+# 4. Проверьте конфигурацию systemd
+sudo cat /etc/systemd/system/deepseek-web-client.service | grep ExecStart
+# Должно быть: ExecStart=/opt/deepseek-web-client/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
+
+# 5. Если пути неправильные, обновите файл
+sudo nano /etc/systemd/system/deepseek-web-client.service
+# Исправьте пути на правильные
+
+# 6. Перезагрузите systemd и запустите сервис
+sudo systemctl daemon-reload
+sudo systemctl restart deepseek-web-client
+sudo systemctl status deepseek-web-client
+```
+
+#### Другие проблемы
+
 ```bash
 # Проверьте логи
 sudo journalctl -u deepseek-web-client -n 50
