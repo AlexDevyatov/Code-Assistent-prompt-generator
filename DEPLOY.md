@@ -237,24 +237,68 @@ sudo systemctl restart deepseek-web-client
 
 ## Диагностика проблем
 
-Для быстрой проверки состояния сервера используйте скрипт диагностики:
+### Автоматическая диагностика
+
+Для полной диагностики проблем с доступностью используйте скрипт:
+
+```bash
+cd /opt/deepseek-web-client
+./diagnose_server.sh
+```
+
+Скрипт проверит:
+- ✅ Статус systemd сервиса
+- ✅ Слушается ли порт 8000
+- ✅ Настройки файрвола
+- ✅ Логи сервиса
+- ✅ Локальное подключение
+- ✅ Переменные окружения
+- ✅ Статические файлы
+- ✅ Конфигурацию systemd
+
+### Быстрая проверка
+
+Для быстрой проверки состояния сервера:
 
 ```bash
 cd /opt/deepseek-web-client
 python3 check_server.py
 ```
 
-Скрипт проверит:
-- ✅ Наличие переменных окружения
-- ✅ Установленные зависимости
-- ✅ Наличие статических файлов
-- ✅ Доступность порта
-
-Также можно проверить health endpoint:
+Проверка health endpoint:
 
 ```bash
 curl http://localhost:8000/api/health
 ```
+
+### Проверка доступности извне
+
+Если сайт не доступен по внешнему IP (например, http://185.28.85.26:8000/), проверьте:
+
+1. **Файрвол** - порт 8000 должен быть открыт:
+   ```bash
+   sudo ufw allow 8000/tcp
+   sudo ufw status
+   ```
+
+2. **Сервис слушает на 0.0.0.0** (не только localhost):
+   ```bash
+   # Проверьте конфигурацию systemd
+   sudo cat /etc/systemd/system/deepseek-web-client.service | grep ExecStart
+   # Должно быть: --host 0.0.0.0 --port 8000
+   ```
+
+3. **Сервис запущен**:
+   ```bash
+   sudo systemctl status deepseek-web-client
+   ```
+
+4. **Порт слушается**:
+   ```bash
+   sudo netstat -tulpn | grep 8000
+   # или
+   sudo ss -tulpn | grep 8000
+   ```
 
 ## Устранение неполадок
 
@@ -297,6 +341,55 @@ ls -la /opt/deepseek-web-client
 - Проверьте, что переменная окружения `DEEPSEEK_API_KEY` установлена
 - Проверьте логи FastAPI: `sudo journalctl -u deepseek-web-client -f`
 - Убедитесь, что сервис слушает на правильном порту (8000)
+
+### Сайт не доступен по внешнему IP
+
+Если сайт не доступен по внешнему IP адресу (например, http://185.28.85.26:8000/):
+
+1. **Проверьте файрвол**:
+   ```bash
+   # Откройте порт 8000
+   sudo ufw allow 8000/tcp
+   sudo ufw reload
+   sudo ufw status
+   ```
+
+2. **Проверьте, что сервис слушает на 0.0.0.0** (не только 127.0.0.1):
+   ```bash
+   # Проверьте конфигурацию
+   sudo cat /etc/systemd/system/deepseek-web-client.service | grep ExecStart
+   # Должно содержать: --host 0.0.0.0
+   
+   # Если нет, отредактируйте файл:
+   sudo nano /etc/systemd/system/deepseek-web-client.service
+   # Измените на: --host 0.0.0.0 --port 8000
+   sudo systemctl daemon-reload
+   sudo systemctl restart deepseek-web-client
+   ```
+
+3. **Проверьте статус сервиса**:
+   ```bash
+   sudo systemctl status deepseek-web-client
+   ```
+
+4. **Проверьте логи на ошибки**:
+   ```bash
+   sudo journalctl -u deepseek-web-client -n 50 --no-pager
+   ```
+
+5. **Проверьте, что порт слушается на всех интерфейсах**:
+   ```bash
+   sudo netstat -tulpn | grep 8000
+   # Должно показать: 0.0.0.0:8000 или :::8000
+   ```
+
+6. **Проверьте облачный файрвол** (если используете VPS):
+   - AWS: Security Groups
+   - DigitalOcean: Firewalls
+   - Google Cloud: Firewall Rules
+   - Azure: Network Security Groups
+   
+   Убедитесь, что порт 8000 открыт для входящих соединений.
 
 ## Безопасность
 
