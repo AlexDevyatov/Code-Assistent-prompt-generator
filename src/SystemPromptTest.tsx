@@ -21,7 +21,7 @@ function SystemPromptTest() {
   const [isLoading, setIsLoading] = useState(false)
   const [currentSystemPrompt, setCurrentSystemPrompt] = useState(systemPrompt)
   const [systemPromptChanged, setSystemPromptChanged] = useState(false)
-  const [showSystemPromptEditor, setShowSystemPromptEditor] = useState(true)
+  const [showSystemPromptModal, setShowSystemPromptModal] = useState(false)
   const [showScrollToBottom, setShowScrollToBottom] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -254,39 +254,33 @@ function SystemPromptTest() {
 
   return (
     <div className="system-prompt-test">
-      <div className="nav-bar">
-        <Link to="/" className="nav-link">← На главную</Link>
-      </div>
+      <Link to="/" className="back-button">← Назад</Link>
       
-      <div className="system-prompt-test-container" ref={containerRef}>
-        <div className="system-prompt-test-header">
-          <h1>День 5. System Prompt</h1>
-          <p className="system-prompt-test-description">
-            Задайте агенту systemPrompt и сделайте несколько шагов в диалоге. 
-            В ходе работы поменяйте systemPrompt и продолжите диалог. 
-            Сравните, как меняется реакция агента с изменением systemPrompt.
-          </p>
-        </div>
+      <button 
+        className="system-prompt-trigger-button"
+        onClick={() => setShowSystemPromptModal(true)}
+        title="Открыть редактор System Prompt"
+      >
+        ⚙️ System Prompt
+      </button>
 
-        <div className="system-prompt-section sticky-section">
-          <div className="system-prompt-header">
-            <h2>⚙️ System Prompt</h2>
-            <div className="system-prompt-actions">
-              <button
-                type="button"
-                onClick={() => setShowSystemPromptEditor(!showSystemPromptEditor)}
-                className="toggle-button"
+      {showSystemPromptModal && (
+        <div className="modal-overlay" onClick={() => setShowSystemPromptModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>⚙️ System Prompt</h2>
+              <button 
+                className="modal-close-button"
+                onClick={() => setShowSystemPromptModal(false)}
               >
-                {showSystemPromptEditor ? '▼ Скрыть редактор' : '▶ Показать редактор'}
+                ✕
               </button>
             </div>
-          </div>
-          
-          {showSystemPromptEditor && (
+            
             <form onSubmit={handleSystemPromptSubmit} className="system-prompt-form">
               <div className="system-prompt-editor">
                 <label htmlFor="system-prompt-input" className="system-prompt-label">
-                  ✏️ Введите новый System Prompt здесь:
+                  Введите новый System Prompt:
                 </label>
                 <textarea
                   id="system-prompt-input"
@@ -295,7 +289,7 @@ function SystemPromptTest() {
                   onChange={(e) => setSystemPrompt(e.target.value)}
                   onKeyDown={handleSystemPromptKeyDown}
                   placeholder="Например: Ты — полезный ассистент. Отвечай кратко и по делу."
-                  rows={4}
+                  rows={6}
                   disabled={isLoading}
                   className="system-prompt-textarea"
                 />
@@ -305,7 +299,7 @@ function SystemPromptTest() {
                     disabled={systemPrompt.trim() === currentSystemPrompt.trim() || isLoading}
                     className="change-prompt-button"
                   >
-                    ✅ Применить System Prompt (Ctrl+Enter)
+                    ✅ Применить (Ctrl+Enter)
                   </button>
                   <button
                     type="button"
@@ -320,7 +314,7 @@ function SystemPromptTest() {
               </div>
               <div className="current-prompt-info">
                 <div className="current-prompt-header">
-                  <span className="current-prompt-label">📌 Текущий активный System Prompt:</span>
+                  <span className="current-prompt-label">Текущий активный System Prompt:</span>
                   <button
                     type="button"
                     onClick={handleCopySystemPrompt}
@@ -333,12 +327,18 @@ function SystemPromptTest() {
                 <div className="current-prompt-text">{currentSystemPrompt}</div>
               </div>
             </form>
-          )}
-          {!showSystemPromptEditor && (
-            <div className="system-prompt-collapsed-hint">
-              Нажмите "Показать редактор" выше, чтобы изменить System Prompt
-            </div>
-          )}
+          </div>
+        </div>
+      )}
+
+      <div className="system-prompt-test-container" ref={containerRef}>
+        <div className="system-prompt-test-header">
+          <h1>День 5. System Prompt</h1>
+          <p className="system-prompt-test-description">
+            Задайте агенту systemPrompt и сделайте несколько шагов в диалоге. 
+            В ходе работы поменяйте systemPrompt и продолжите диалог. 
+            Сравните, как меняется реакция агента с изменением systemPrompt.
+          </p>
         </div>
 
         {systemPromptChanged && lastSystemChangeIndex >= 0 && (
