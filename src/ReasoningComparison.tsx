@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { InlineMath, BlockMath } from 'react-katex'
 import 'katex/dist/katex.min.css'
@@ -25,9 +25,8 @@ function ReasoningComparison() {
     resultsEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
 
-  useEffect(() => {
-    scrollToBottom()
-  }, [results])
+  // Убрана автоматическая прокрутка во время генерации
+  // Прокрутка происходит только при завершении или по запросу пользователя
 
   const callAPIStream = async (
     resultId: string,
@@ -101,7 +100,7 @@ function ReasoningComparison() {
                       : r
                   )
                 )
-                scrollToBottom()
+                // Убрана автоматическая прокрутка во время генерации
               } else if (data.error) {
                 throw new Error(data.error)
               }
@@ -120,6 +119,10 @@ function ReasoningComparison() {
             : r
         )
       )
+      // Прокрутка только после завершения генерации конкретного результата
+      setTimeout(() => {
+        scrollToBottom()
+      }, 100)
     } catch (error) {
       setResults((prev) =>
         prev.map((r) =>
@@ -277,26 +280,44 @@ function ReasoningComparison() {
   }
 
   const renderMath = (text: string) => {
+    if (!text) return ['']
+    
     // Простой парсер для LaTeX формул
     // Ищем блоки $...$ для inline и $$...$$ для block
     const parts: (string | JSX.Element)[] = []
     let lastIndex = 0
     let key = 0
 
-    // Обработка block math ($$...$$)
+    // Обработка block math ($$...$$) - ищем полные пары
     const blockMathRegex = /\$\$([^$]+)\$\$/g
     let match
+    const blockMatches: Array<{start: number, end: number, content: string}> = []
 
+    // Собираем все полные блоки
     while ((match = blockMathRegex.exec(text)) !== null) {
-      if (match.index > lastIndex) {
-        const beforeText = text.slice(lastIndex, match.index)
+      blockMatches.push({
+        start: match.index,
+        end: match.index + match[0].length,
+        content: match[1]
+      })
+    }
+
+    // Обрабатываем блоки по порядку
+    for (const blockMatch of blockMatches) {
+      if (blockMatch.start > lastIndex) {
+        const beforeText = text.slice(lastIndex, blockMatch.start)
         parts.push(...renderInlineMath(beforeText, key))
         key += beforeText.length
       }
-      parts.push(
-        <BlockMath key={`block-${key}`} math={match[1]} />
-      )
-      lastIndex = match.index + match[0].length
+      try {
+        parts.push(
+          <BlockMath key={`block-${key}-${blockMatch.start}`} math={blockMatch.content.trim()} />
+        )
+      } catch (e) {
+        // Если LaTeX невалидный, показываем как есть
+        parts.push(`$$${blockMatch.content}$$`)
+      }
+      lastIndex = blockMatch.end
       key++
     }
 
@@ -309,25 +330,38 @@ function ReasoningComparison() {
   }
 
   const renderInlineMath = (text: string, startKey: number): (string | JSX.Element)[] => {
+    if (!text) return []
+    
     const parts: (string | JSX.Element)[] = []
     const inlineMathRegex = /\$([^$\n]+)\$/g
     let lastIndex = 0
     let key = startKey
 
+    // Собираем все совпадения
+    const matches: Array<{start: number, end: number, content: string}> = []
     let match
     while ((match = inlineMathRegex.exec(text)) !== null) {
-      if (match.index > lastIndex) {
-        parts.push(text.slice(lastIndex, match.index))
+      matches.push({
+        start: match.index,
+        end: match.index + match[0].length,
+        content: match[1]
+      })
+    }
+
+    // Обрабатываем совпадения
+    for (const mathMatch of matches) {
+      if (mathMatch.start > lastIndex) {
+        parts.push(text.slice(lastIndex, mathMatch.start))
       }
       try {
         parts.push(
-          <InlineMath key={`inline-${key}`} math={match[1]} />
+          <InlineMath key={`inline-${key}-${mathMatch.start}`} math={mathMatch.content.trim()} />
         )
       } catch (e) {
         // Если LaTeX невалидный, показываем как есть
-        parts.push(`$${match[1]}$`)
+        parts.push(`$${mathMatch.content}$`)
       }
-      lastIndex = match.index + match[0].length
+      lastIndex = mathMatch.end
       key++
     }
 
@@ -397,8 +431,8 @@ function ReasoningComparison() {
                     ) : result.error ? (
                       <div className="error-message">Ошибка: {result.error}</div>
                     ) : (
-                      <div className="result-text">
-                        {renderMath(result.response)}
+                      <div className="result-text" key={`result-${result.id}`}>
+                        {result.response ? renderMath(result.response) : ''}
                       </div>
                     )}
                   </div>
