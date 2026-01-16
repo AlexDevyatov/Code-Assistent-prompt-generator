@@ -276,12 +276,12 @@ function ReasoningComparison() {
     
     // Улучшенный парсер для LaTeX формул
     // Обрабатываем block math ($$...$$) и inline math ($...$)
+    // Также распознаем LaTeX команды и математические выражения
     const parts: (string | JSX.Element)[] = []
     let lastIndex = 0
     let key = 0
 
     // Обработка block math ($$...$$) - поддерживаем многострочные формулы
-    // Используем более гибкий regex, который учитывает переносы строк
     const blockMathRegex = /\$\$([\s\S]*?)\$\$/g
     let match
     const blockMatches: Array<{start: number, end: number, content: string}> = []
@@ -330,33 +330,156 @@ function ReasoningComparison() {
     if (!text) return []
     
     const parts: (string | JSX.Element)[] = []
-    // Улучшенный regex для inline math - учитываем, что $ может быть частью формулы
-    // Исключаем случаи, когда $ стоит в начале строки или после пробела (это может быть block math)
-    const inlineMathRegex = /(?<!\$)\$(?!\$)([^$\n]+?)\$(?!\$)/g
     let lastIndex = 0
     let key = startKey
 
-    // Собираем все совпадения
-    const matches: Array<{start: number, end: number, content: string}> = []
+    // Regex для поиска inline math ($...$)
+    const inlineMathRegex = /(?<!\$)\$(?!\$)([^$\n]+?)\$(?!\$)/g
+    
+    // Собираем все совпадения inline math
+    const inlineMatches: Array<{start: number, end: number, content: string, type: 'inline'}> = []
     let match
     inlineMathRegex.lastIndex = 0
     while ((match = inlineMathRegex.exec(text)) !== null) {
-      // Проверяем, что это не часть block math ($$...$$)
       const beforeChar = match.index > 0 ? text[match.index - 1] : ''
       const afterChar = match.index + match[0].length < text.length ? text[match.index + match[0].length] : ''
       if (beforeChar !== '$' && afterChar !== '$') {
-        matches.push({
+        inlineMatches.push({
           start: match.index,
           end: match.index + match[0].length,
-          content: match[1]
+          content: match[1],
+          type: 'inline'
         })
       }
     }
 
+    // Ищем LaTeX выражения (последовательности, содержащие \команда)
+    // Алгоритм: находим все обратные слэши, которые не экранированы, и расширяем выражение
+    const latexMatches: Array<{start: number, end: number, content: string, type: 'latex'}> = []
+    
+    for (let i = 0; i < text.length; i++) {
+      // Пропускаем, если это часть inline math
+      const isInInlineMath = inlineMatches.some(m => i >= m.start && i < m.end)
+      if (isInInlineMath) continue
+      
+      // Ищем обратный слэш (начало LaTeX команды)
+      if (text[i] === '\\' && (i === 0 || text[i - 1] !== '\\')) {
+        let startPos = i
+        let endPos = i + 1
+        
+        // Пропускаем обратный слэш и собираем команду
+        while (endPos < text.length && /[a-zA-Z@]/.test(text[endPos])) {
+          endPos++
+        }
+        
+        // Если нашли команду, расширяем выражение, включая аргументы
+        if (endPos > i + 1) {
+          // Обрабатываем аргументы в {} и []
+          let braceCount = 0
+          let bracketCount = 0
+          
+          while (endPos < text.length) {
+            const char = text[endPos]
+            if (char === '{') braceCount++
+            else if (char === '}') {
+              braceCount--
+              if (braceCount < 0) break
+            }
+            else if (char === '[') bracketCount++
+            else if (char === ']') {
+              bracketCount--
+              if (bracketCount < 0) break
+            }
+            else if (braceCount === 0 && bracketCount === 0) {
+              // Проверяем, является ли следующий символ частью математического выражения
+              if (char === '\\' && text[endPos - 1] !== '\\') {
+                // Новая команда - расширяем
+                endPos++
+                continue
+              }
+              if (/[\^_]/.test(char)) {
+                // Индексы/степени - расширяем
+                endPos++
+                if (endPos < text.length && text[endPos] === '{') {
+                  endPos++
+                  braceCount++
+                  continue
+                }
+                if (endPos < text.length && /[a-zA-Z0-9]/.test(text[endPos])) {
+                  endPos++
+                  continue
+                }
+              }
+              if (!/[a-zA-Z0-9\^_\{\[\(\)\+\-\*\/=<>≤≥≠±×÷∑∏∫√∞α-ωΑ-Ω\s]/.test(char)) {
+                break
+              }
+            }
+            endPos++
+          }
+          
+          // Расширяем влево, если есть математические символы
+          while (startPos > 0) {
+            const prevChar = text[startPos - 1]
+            if (/[a-zA-Z0-9\^_\{\[\(\)\+\-\*\/=<>≤≥≠±×÷∑∏∫√∞α-ωΑ-Ω]/.test(prevChar)) {
+              startPos--
+            } else {
+              break
+            }
+          }
+          
+          // Расширяем вправо, если есть математические символы
+          while (endPos < text.length) {
+            const nextChar = text[endPos]
+            if (nextChar === '\\' && text[endPos - 1] !== '\\') {
+              // Новая команда - включаем её
+              endPos++
+              continue
+            }
+            if (!/[a-zA-Z0-9\^_\}\])\(\)\+\-\*\/=<>≤≥≠±×÷∑∏∫√∞α-ωΑ-Ω\s]/.test(nextChar)) {
+              break
+            }
+            endPos++
+          }
+          
+          const content = text.slice(startPos, endPos)
+          if (content.trim().length > 0) {
+            latexMatches.push({
+              start: startPos,
+              end: endPos,
+              content: content.trim(),
+              type: 'latex'
+            })
+          }
+          
+          i = endPos - 1 // Пропускаем обработанную часть
+        }
+      }
+    }
+
+    // Объединяем все совпадения и сортируем по позиции
+    const allMatches = [...inlineMatches, ...latexMatches].sort((a, b) => a.start - b.start)
+    
+    // Удаляем перекрывающиеся совпадения (приоритет у inline math)
+    const filteredMatches: Array<{start: number, end: number, content: string, type: string}> = []
+    for (const m of allMatches) {
+      const overlaps = filteredMatches.some(fm => 
+        (m.start < fm.end && m.end > fm.start)
+      )
+      if (!overlaps) {
+        filteredMatches.push(m)
+      }
+    }
+    
+    // Сортируем снова после фильтрации
+    filteredMatches.sort((a, b) => a.start - b.start)
+
     // Обрабатываем совпадения
-    for (const mathMatch of matches) {
+    for (const mathMatch of filteredMatches) {
       if (mathMatch.start > lastIndex) {
-        parts.push(text.slice(lastIndex, mathMatch.start))
+        const plainText = text.slice(lastIndex, mathMatch.start)
+        if (plainText.trim()) {
+          parts.push(plainText)
+        }
       }
       try {
         const mathContent = mathMatch.content.trim()
@@ -367,14 +490,17 @@ function ReasoningComparison() {
         }
       } catch (e) {
         // Если LaTeX невалидный, показываем как есть
-        parts.push(`$${mathMatch.content}$`)
+        parts.push(mathMatch.content)
       }
       lastIndex = mathMatch.end
       key++
     }
 
     if (lastIndex < text.length) {
-      parts.push(text.slice(lastIndex))
+      const remainingText = text.slice(lastIndex)
+      if (remainingText.trim()) {
+        parts.push(remainingText)
+      }
     }
 
     return parts.length > 0 ? parts : [text]
