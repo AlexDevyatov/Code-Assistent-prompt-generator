@@ -156,6 +156,8 @@ async def chat(request: ChatRequest):
         }
         
         logger.info(f"Sending request to DeepSeek API with {len(messages)} messages")
+        if request.system_prompt:
+            logger.info(f"System prompt: {request.system_prompt[:100]}...")
         
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(

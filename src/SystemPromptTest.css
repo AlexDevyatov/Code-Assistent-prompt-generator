@@ -450,17 +450,44 @@
 .chat-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   margin-bottom: 20px;
   padding-bottom: 16px;
   border-bottom: 2px solid #f0f0f0;
+  gap: 16px;
 }
 
 .chat-header h2 {
   font-size: 1.5rem;
   color: #333;
-  margin: 0;
+  margin: 0 0 8px 0;
   font-weight: 600;
+}
+
+.active-system-prompt-indicator {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: #666;
+}
+
+.indicator-label {
+  font-weight: 500;
+  color: #888;
+}
+
+.indicator-value {
+  color: #007bff;
+  font-weight: 500;
+  padding: 4px 8px;
+  background-color: #e7f3ff;
+  border-radius: 4px;
+  display: inline-block;
+  max-width: 400px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .clear-chat-button {

@@ -111,7 +111,9 @@ function SystemPromptTest() {
     setMessages((prev) => [...prev, systemChangeMessage])
     setCurrentSystemPrompt(systemPrompt)
     setSystemPromptChanged(true)
+    setShowSystemPromptModal(false)
     scrollToBottom()
+    console.log('System Prompt изменён на:', systemPrompt)
   }
 
   const handleResetSystemPrompt = () => {
@@ -173,15 +175,20 @@ function SystemPromptTest() {
         { role: 'user', content: userMessage.content }
       ]
       
+      const requestBody = { 
+        system_prompt: currentSystemPrompt,
+        messages: messagesHistory
+      }
+      
+      console.log('Sending request with system_prompt:', currentSystemPrompt)
+      console.log('Messages:', messagesHistory)
+      
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ 
-          system_prompt: currentSystemPrompt,
-          messages: messagesHistory
-        }),
+        body: JSON.stringify(requestBody),
       })
 
       if (!res.ok) {
@@ -351,7 +358,17 @@ function SystemPromptTest() {
 
         <div className="chat-container">
           <div className="chat-header">
-            <h2>Диалог с агентом</h2>
+            <div>
+              <h2>Диалог с агентом</h2>
+              <div className="active-system-prompt-indicator">
+                <span className="indicator-label">Активный System Prompt:</span>
+                <span className="indicator-value" title={currentSystemPrompt}>
+                  {currentSystemPrompt.length > 60 
+                    ? currentSystemPrompt.substring(0, 60) + '...' 
+                    : currentSystemPrompt}
+                </span>
+              </div>
+            </div>
             {messages.length > 0 && (
               <button
                 type="button"
