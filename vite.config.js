@@ -7,6 +7,12 @@ export default defineConfig({
   root: 'frontend',
   build: {
     outDir: '../static',
+    emptyOutDir: true,
+  },
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './frontend'),
+    },
   },
   server: {
     proxy: {
