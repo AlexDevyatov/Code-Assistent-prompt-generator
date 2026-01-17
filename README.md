@@ -6,20 +6,25 @@
 
 ```
 .
-├── main.py              # FastAPI бэкенд
+├── backend/             # FastAPI бэкенд
+│   ├── main.py          # Главный файл приложения
+│   ├── config.py        # Конфигурация
+│   ├── routers/         # Роутеры для эндпоинтов
+│   ├── services/        # Сервисы (работа с API)
+│   └── constants/       # Константы (промпты)
+├── frontend/            # React приложение
+│   ├── index.html
+│   ├── main.tsx
+│   ├── App.tsx
+│   ├── App.css
+│   ├── index.css
+│   └── constants.ts     # Константы (промпты)
 ├── .env                 # Переменные окружения (API ключ)
 ├── .gitignore
 ├── requirements.txt     # Python зависимости
 ├── package.json         # Node.js зависимости
 ├── vite.config.js       # Конфигурация Vite
 ├── tsconfig.json        # TypeScript конфигурация
-├── src/                 # Исходники React приложения
-│   ├── index.html
-│   ├── main.tsx
-│   ├── App.tsx
-│   ├── App.css
-│   ├── index.css
-│   └── vite-env.d.ts
 └── static/              # Собранный фронтенд (создаётся после npm run build)
 ```
 
@@ -71,7 +76,7 @@ npm run build
 2. Запустите только бэкенд:
 
 ```bash
-uvicorn main:app --reload
+uvicorn backend.main:app --reload
 ```
 
 Приложение будет доступно по адресу http://localhost:8000

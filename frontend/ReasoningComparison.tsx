@@ -3,6 +3,16 @@ import { Link } from 'react-router-dom'
 import { InlineMath, BlockMath } from 'react-katex'
 import 'katex/dist/katex.min.css'
 import './ReasoningComparison.css'
+import {
+  LATEX_INSTRUCTION,
+  EXPERT_MATHEMATICIAN,
+  EXPERT_LOGICIAN,
+  EXPERT_ANALYST,
+  EXPERT_ANALYTIC_COMPARER,
+  PROMPT_GENERATOR_SYSTEM,
+  PROMPT_GENERATOR_PROMPT_TEMPLATE,
+  COMPARISON_PROMPT_TEMPLATE
+} from './constants'
 
 interface ReasoningResult {
   id: string
@@ -182,22 +192,19 @@ function ReasoningComparison() {
 
     setResults(initialResults)
 
-    // Константа с инструкцией по LaTeX
-    const latexInstruction = '\n\nВАЖНО: Все математические формулы, уравнения, выражения и символы должны быть строго в формате LaTeX. Используй синтаксис LaTeX: $...$ для inline формул и $$...$$ для блочных формул. Например: $x^2 + 5x + 6 = 0$ или $$\\int_0^1 x^2 dx = \\frac{1}{3}$$'
-
     // Обрабатываем каждый метод с использованием streaming
     const processMethod = async (result: ReasoningResult) => {
       try {
         if (result.id === 'direct') {
           // Прямой ответ
-          await callAPIStream(result.id, task + latexInstruction)
+          await callAPIStream(result.id, task + LATEX_INSTRUCTION)
         } else if (result.id === 'stepwise') {
           // Пошаговое решение
-          await callAPIStream(result.id, `${task}${latexInstruction}\n\nРешай пошагово, объясняя каждый шаг.`)
+          await callAPIStream(result.id, `${task}${LATEX_INSTRUCTION}\n\nРешай пошагово, объясняя каждый шаг.`)
         } else if (result.id === 'prompt-engineering') {
           // Для этого метода нужен двухэтапный процесс
           // Сначала получаем промпт (не streaming, т.к. короткий)
-          const promptPrompt = `Создай оптимальный промпт для решения следующей задачи, который поможет получить наиболее точный и полный ответ. ОБЯЗАТЕЛЬНО включи в промпт требование: "Все математические формулы, уравнения, выражения и символы должны быть строго в формате LaTeX. Используй синтаксис LaTeX: $...$ для inline формул и $$...$$ для блочных формул." Отвечай только промптом, без дополнительных пояснений.\n\nЗадача: ${task}`
+          const promptPrompt = PROMPT_GENERATOR_PROMPT_TEMPLATE(task)
           
           // Получаем промпт обычным способом
           const res = await fetch('/api/chat', {
@@ -205,7 +212,7 @@ function ReasoningComparison() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               messages: [
-                { role: 'system', content: 'Ты — эксперт по созданию промптов для решения задач. Все создаваемые тобой промпты ОБЯЗАТЕЛЬНО должны включать требование использовать LaTeX для всех математических формул.' },
+                { role: 'system', content: PROMPT_GENERATOR_SYSTEM },
                 { role: 'user', content: promptPrompt }
               ],
             }),
@@ -215,7 +222,7 @@ function ReasoningComparison() {
           
           // Затем используем streaming для решения задачи
           // Добавляем инструкцию по LaTeX и в промпт, и отдельно для надежности
-          await callAPIStream(result.id, generatedPrompt + latexInstruction, 'ОБЯЗАТЕЛЬНО используй LaTeX для всех математических формул, уравнений и выражений. Формат: $...$ для inline и $$...$$ для блочных формул.')
+          await callAPIStream(result.id, generatedPrompt + LATEX_INSTRUCTION, 'ОБЯЗАТЕЛЬНО используй LaTeX для всех математических формул, уравнений и выражений. Формат: $...$ для inline и $$...$$ для блочных формул.')
           
           // Обновляем результат с информацией о промпте
           setResults((prev) =>
@@ -232,22 +239,22 @@ function ReasoningComparison() {
           // Эксперт-математик
           await callAPIStream(
             result.id,
-            task + latexInstruction,
-            'Ты — опытный математик с глубокими знаниями в алгебре, геометрии и математическом анализе. Реши задачу, показав все математические выкладки и обоснования. Все формулы должны быть в формате LaTeX.'
+            task + LATEX_INSTRUCTION,
+            EXPERT_MATHEMATICIAN
           )
         } else if (result.id === 'expert-2') {
           // Эксперт-логик
           await callAPIStream(
             result.id,
-            task + latexInstruction,
-            'Ты — эксперт по логике и дедуктивному мышлению. Реши задачу, используя логические рассуждения и пошаговый анализ. Если в задаче есть математические элементы, используй LaTeX для их записи.'
+            task + LATEX_INSTRUCTION,
+            EXPERT_LOGICIAN
           )
         } else if (result.id === 'expert-3') {
           // Эксперт-аналитик
           await callAPIStream(
             result.id,
-            task + latexInstruction,
-            'Ты — аналитик, специализирующийся на комплексном анализе проблем. Реши задачу, рассмотрев её с разных углов и предложив наиболее эффективное решение. ОБЯЗАТЕЛЬНО: все математические формулы, уравнения, выражения и символы должны быть строго в формате LaTeX. Используй синтаксис LaTeX: $...$ для inline формул (например: $x^2 + 5x + 6 = 0$) и $$...$$ для блочных формул (например: $$\\int_0^1 x^2 dx = \\frac{1}{3}$$). Никогда не используй обычный текст для математических выражений.'
+            task + LATEX_INSTRUCTION,
+            EXPERT_ANALYST
           )
         }
       } catch (error) {
@@ -295,31 +302,20 @@ function ReasoningComparison() {
       setResults((prev) => [...prev, summarizerResult])
 
       // Формируем промпт для суммаризатора
-      const comparisonPrompt = `Проанализируй и сравни следующие ответы на задачу "${task}":
-
-${allResultsForComparison.map((r, idx) => `Метод ${idx + 1}: ${r.method}
+      const responsesText = allResultsForComparison.map((r, idx) => `Метод ${idx + 1}: ${r.method}
 Ответ:
 ${r.response}
 
----`).join('\n\n')}
-
-Задача: Сравни все ответы и предоставь:
-1. Краткое резюме каждого подхода
-2. Сравнение качества и полноты ответов
-3. Выявление общих моментов и различий
-4. Оценку, какой метод дал наиболее точный/полный ответ
-5. Рекомендации по использованию методов
-
-ОБЯЗАТЕЛЬНО: Все математические формулы, уравнения, выражения и символы должны быть строго в формате LaTeX. Используй синтаксис LaTeX: $...$ для inline формул и $$...$$ для блочных формул.`
-
-      const latexInstruction = '\n\nВАЖНО: Все математические формулы, уравнения, выражения и символы должны быть строго в формате LaTeX. Используй синтаксис LaTeX: $...$ для inline формул и $$...$$ для блочных формул.'
+---`).join('\n\n')
+      
+      const comparisonPrompt = COMPARISON_PROMPT_TEMPLATE(task, responsesText)
 
       // Запускаем суммаризатор
       try {
         await callAPIStream(
           'summarizer',
-          comparisonPrompt + latexInstruction,
-          'Ты — эксперт-аналитик, специализирующийся на сравнении и оценке различных подходов к решению задач. Твоя задача — объективно сравнить ответы и выделить их сильные и слабые стороны. ОБЯЗАТЕЛЬНО используй LaTeX для всех математических формул.'
+          comparisonPrompt + LATEX_INSTRUCTION,
+          EXPERT_ANALYTIC_COMPARER
         )
       } catch (error) {
         console.error('Ошибка при работе суммаризатора:', error)

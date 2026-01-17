@@ -76,13 +76,13 @@ fi
 deactivate
 echo ""
 
-# 4. Проверка main.py
-echo -e "${YELLOW}4. Проверка main.py...${NC}"
-if [ ! -f "main.py" ]; then
-    echo -e "${RED}❌ main.py не найден${NC}"
+# 4. Проверка backend/main.py
+echo -e "${YELLOW}4. Проверка backend/main.py...${NC}"
+if [ ! -f "backend/main.py" ]; then
+    echo -e "${RED}❌ backend/main.py не найден${NC}"
     exit 1
 fi
-echo -e "${GREEN}✅ main.py найден${NC}"
+echo -e "${GREEN}✅ backend/main.py найден${NC}"
 echo ""
 
 # 5. Обновление systemd файла
@@ -107,7 +107,7 @@ Type=simple
 User=$SERVICE_USER
 WorkingDirectory=$PROJECT_DIR
 Environment="PATH=$PROJECT_DIR/venv/bin"
-ExecStart=$PROJECT_DIR/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
+ExecStart=$PROJECT_DIR/venv/bin/uvicorn backend.main:app --host 0.0.0.0 --port 8000
 Restart=always
 RestartSec=10
 
@@ -130,7 +130,7 @@ else
     sudo sed -i "s|WorkingDirectory=.*|WorkingDirectory=$PROJECT_DIR|g" "$SYSTEMD_FILE"
     
     # Обновляем ExecStart
-    sudo sed -i "s|ExecStart=.*|ExecStart=$PROJECT_DIR/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000|g" "$SYSTEMD_FILE"
+    sudo sed -i "s|ExecStart=.*|ExecStart=$PROJECT_DIR/venv/bin/uvicorn backend.main:app --host 0.0.0.0 --port 8000|g" "$SYSTEMD_FILE"
     
     # Обновляем PATH
     sudo sed -i "s|Environment=\"PATH=.*|Environment=\"PATH=$PROJECT_DIR/venv/bin\"|g" "$SYSTEMD_FILE"
@@ -160,7 +160,7 @@ if [ -n "$SERVICE_USER" ]; then
     echo -e "${BLUE}   Пользователь сервиса: $SERVICE_USER${NC}"
     
     # Проверяем права на директорию проекта
-    if sudo -u "$SERVICE_USER" test -r "$PROJECT_DIR/main.py"; then
+    if sudo -u "$SERVICE_USER" test -r "$PROJECT_DIR/backend/main.py"; then
         echo -e "${GREEN}✅ Пользователь $SERVICE_USER имеет доступ к проекту${NC}"
     else
         echo -e "${YELLOW}⚠️  Проблемы с правами доступа${NC}"

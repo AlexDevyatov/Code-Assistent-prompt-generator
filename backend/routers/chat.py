@@ -1,0 +1,93 @@
+"""Роутер для обработки чата"""
+import logging
+from typing import Optional, List, Dict
+from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
+
+from backend.services.deepseek_api import call_deepseek_api, stream_deepseek_api
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/api/chat", tags=["chat"])
+
+
+class ChatRequest(BaseModel):
+    prompt: Optional[str] = None
+    system_prompt: Optional[str] = None
+    messages: Optional[List[Dict[str, str]]] = None
+
+
+def _prepare_messages(request: ChatRequest) -> List[Dict[str, str]]:
+    """
+    Подготовка сообщений из запроса
+    
+    Args:
+        request: Запрос с промптом или сообщениями
+    
+    Returns:
+        Список сообщений в формате для API
+    """
+    if request.messages:
+        messages = []
+        if request.system_prompt:
+            messages.append({"role": "system", "content": request.system_prompt})
+        messages.extend(request.messages)
+    elif request.prompt:
+        messages = [{"role": "user", "content": request.prompt}]
+    else:
+        raise HTTPException(status_code=400, detail="Either 'prompt' or 'messages' must be provided")
+    
+    return messages
+
+
+@router.post("/stream")
+async def chat_stream(request: ChatRequest):
+    """Streaming endpoint для получения ответов по частям"""
+    try:
+        logger.info(f"Received streaming chat request: messages={bool(request.messages)}, prompt={bool(request.prompt)}")
+        
+        messages = _prepare_messages(request)
+        
+        async def generate():
+            async for chunk in stream_deepseek_api(messages):
+                yield f"data: {chunk}\n\n"
+        
+        return StreamingResponse(generate(), media_type="text/event-stream")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error in streaming: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+@router.post("")
+async def chat(request: ChatRequest):
+    """Обычный endpoint для получения ответа"""
+    try:
+        logger.info(f"Received chat request: messages={bool(request.messages)}, prompt={bool(request.prompt)}")
+        
+        messages = _prepare_messages(request)
+        
+        logger.info(f"Sending request to DeepSeek API with {len(messages)} messages")
+        if request.system_prompt:
+            logger.info(f"System prompt: {request.system_prompt[:100]}...")
+        
+        data = await call_deepseek_api(messages)
+        
+        # Извлекаем ответ из структуры DeepSeek API
+        if "choices" in data and len(data["choices"]) > 0:
+            result = {"response": data["choices"][0]["message"]["content"]}
+            logger.info("Successfully received response from DeepSeek API")
+            return result
+        else:
+            logger.error(f"Unexpected response format: {data}")
+            raise HTTPException(status_code=500, detail="Unexpected response format from DeepSeek API")
+                
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+

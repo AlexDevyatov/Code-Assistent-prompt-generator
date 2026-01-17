@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"vite\" \"uvicorn main:app --reload\"",
+    "dev": "concurrently \"vite\" \"uvicorn backend.main:app --reload\"",
     "build": "vite build",
     "preview": "vite preview"
   },

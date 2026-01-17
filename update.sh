@@ -129,12 +129,12 @@ if [ "$FULL_UPDATE" = true ]; then
             
             # Обновляем пути
             sudo sed -i "s|WorkingDirectory=.*|WorkingDirectory=$PROJECT_DIR|g" "$SYSTEMD_FILE"
-            sudo sed -i "s|ExecStart=.*|ExecStart=$PROJECT_DIR/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000|g" "$SYSTEMD_FILE"
+            sudo sed -i "s|ExecStart=.*|ExecStart=$PROJECT_DIR/venv/bin/uvicorn backend.main:app --host 0.0.0.0 --port 8000|g" "$SYSTEMD_FILE"
             sudo sed -i "s|Environment=\"PATH=.*|Environment=\"PATH=$PROJECT_DIR/venv/bin\"|g" "$SYSTEMD_FILE"
             
             # Проверяем, что есть --host 0.0.0.0
             if ! grep "ExecStart" "$SYSTEMD_FILE" | grep -q "0.0.0.0"; then
-                sudo sed -i 's|uvicorn main:app|uvicorn main:app --host 0.0.0.0|g' "$SYSTEMD_FILE"
+                sudo sed -i 's|uvicorn backend.main:app|uvicorn backend.main:app --host 0.0.0.0|g' "$SYSTEMD_FILE"
             fi
             
             sudo systemctl daemon-reload

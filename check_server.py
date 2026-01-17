@@ -86,7 +86,7 @@ def main():
         print("1. Убедитесь, что .env файл существует с DEEPSEEK_API_KEY")
         print("2. Установите зависимости: pip install -r requirements.txt")
         print("3. Соберите фронтенд: npm run build")
-        print("4. Запустите сервер: uvicorn main:app --host 0.0.0.0 --port 8000")
+        print("4. Запустите сервер: uvicorn backend.main:app --host 0.0.0.0 --port 8000")
         sys.exit(1)
 
 if __name__ == "__main__":

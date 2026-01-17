@@ -45,15 +45,17 @@ echo -e "${GREEN}✅ Резервная копия создана: $BACKUP_FILE$
 # Исправляем конфигурацию
 if sudo sed -i 's/--host [0-9.]*/--host 0.0.0.0/g' "$SYSTEMD_FILE" 2>/dev/null; then
     echo -e "${GREEN}✅ Конфигурация исправлена${NC}"
-elif sudo sed -i 's/uvicorn main:app/uvicorn main:app --host 0.0.0.0/g' "$SYSTEMD_FILE" 2>/dev/null; then
+elif sudo sed -i 's/uvicorn backend.main:app/uvicorn backend.main:app --host 0.0.0.0/g' "$SYSTEMD_FILE" 2>/dev/null; then
     echo -e "${GREEN}✅ Конфигурация исправлена${NC}"
+elif sudo sed -i 's/uvicorn main:app/uvicorn backend.main:app --host 0.0.0.0/g' "$SYSTEMD_FILE" 2>/dev/null; then
+    echo -e "${GREEN}✅ Конфигурация исправлена (обновлен путь к модулю)${NC}"
 else
     echo -e "${RED}❌ Не удалось автоматически исправить конфигурацию${NC}"
     echo -e "${YELLOW}Отредактируйте файл вручную:${NC}"
     echo -e "   sudo nano $SYSTEMD_FILE"
     echo ""
     echo -e "${YELLOW}Убедитесь, что строка ExecStart содержит:${NC}"
-    echo -e "   ExecStart=/путь/к/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000"
+    echo -e "   ExecStart=/путь/к/venv/bin/uvicorn backend.main:app --host 0.0.0.0 --port 8000"
     exit 1
 fi
 

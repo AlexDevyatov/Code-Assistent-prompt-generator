@@ -251,7 +251,9 @@ if [ "$DRY_RUN" = false ]; then
                 FIXED=false
                 if sudo sed -i 's/--host [0-9.]*/--host 0.0.0.0/g' "$SYSTEMD_FILE" 2>/dev/null; then
                     FIXED=true
-                elif sudo sed -i 's/uvicorn main:app/uvicorn main:app --host 0.0.0.0/g' "$SYSTEMD_FILE" 2>/dev/null; then
+                elif sudo sed -i 's/uvicorn backend.main:app/uvicorn backend.main:app --host 0.0.0.0/g' "$SYSTEMD_FILE" 2>/dev/null; then
+                    FIXED=true
+                elif sudo sed -i 's/uvicorn main:app/uvicorn backend.main:app --host 0.0.0.0/g' "$SYSTEMD_FILE" 2>/dev/null; then
                     FIXED=true
                 fi
                 
@@ -275,7 +277,7 @@ if [ "$DRY_RUN" = false ]; then
                     log "   sudo nano $SYSTEMD_FILE"
                     log ""
                     log "${YELLOW}💡 Убедитесь, что строка ExecStart содержит:${NC}"
-                    log "   ExecStart=/путь/к/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000"
+                    log "   ExecStart=/путь/к/venv/bin/uvicorn backend.main:app --host 0.0.0.0 --port 8000"
                 fi
             fi
         else

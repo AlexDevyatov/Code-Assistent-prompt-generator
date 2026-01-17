@@ -112,7 +112,7 @@ Type=simple
 User=www-data
 WorkingDirectory=/opt/Code-Assistent-prompt-generator
 Environment="PATH=/opt/Code-Assistent-prompt-generator/venv/bin"
-ExecStart=/opt/Code-Assistent-prompt-generator/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
+ExecStart=/opt/Code-Assistent-prompt-generator/venv/bin/uvicorn backend.main:app --host 0.0.0.0 --port 8000
 Restart=always
 RestartSec=10
 
@@ -389,7 +389,7 @@ deactivate
 
 # 4. Проверьте конфигурацию systemd
 sudo cat /etc/systemd/system/deepseek-web-client.service | grep ExecStart
-# Должно быть: ExecStart=/opt/Code-Assistent-prompt-generator/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
+# Должно быть: ExecStart=/opt/Code-Assistent-prompt-generator/venv/bin/uvicorn backend.main:app --host 0.0.0.0 --port 8000
 
 # 5. Если пути неправильные, обновите файл
 sudo nano /etc/systemd/system/deepseek-web-client.service
@@ -491,7 +491,7 @@ ls -la /opt/Code-Assistent-prompt-generator
    ```
    И изменить ExecStart в systemd:
    ```ini
-   ExecStart=/opt/Code-Assistent-prompt-generator/venv/bin/gunicorn main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
+   ExecStart=/opt/Code-Assistent-prompt-generator/venv/bin/gunicorn backend.main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
    ```
 
 2. Использовать CDN для статических файлов
