@@ -118,19 +118,7 @@ function Chat() {
     scrollToBottom()
 
     try {
-      const recentMessages = messages
-        .filter(msg => msg.id !== 'welcome')
-        .slice(-10)
-        .map(msg => ({
-          role: msg.role,
-          content: msg.content
-        }))
-      
-      const messagesHistory = [
-        ...recentMessages,
-        { role: 'user', content: userMessage.content }
-      ]
-      
+      // Отправляем только system_prompt и текущий запрос (без истории)
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: {
@@ -138,7 +126,7 @@ function Chat() {
         },
         body: JSON.stringify({ 
           system_prompt: SYSTEM_PROMPT,
-          messages: messagesHistory
+          prompt: userMessage.content
         }),
       })
 

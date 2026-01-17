@@ -161,27 +161,14 @@ function SystemPromptTest() {
     scrollToBottom()
 
     try {
-      // Собираем историю сообщений для отправки
-      const recentMessages = messages
-        .filter(msg => msg.role !== 'system-change')
-        .slice(-10)
-        .map(msg => ({
-          role: msg.role === 'user' ? 'user' : 'assistant',
-          content: msg.content
-        }))
-      
-      const messagesHistory = [
-        ...recentMessages,
-        { role: 'user', content: userMessage.content }
-      ]
-      
+      // Отправляем только system_prompt и текущий запрос (без истории)
       const requestBody = { 
         system_prompt: currentSystemPrompt,
-        messages: messagesHistory
+        prompt: userMessage.content
       }
       
       console.log('Sending request with system_prompt:', currentSystemPrompt)
-      console.log('Messages:', messagesHistory)
+      console.log('Prompt:', userMessage.content)
       
       const res = await fetch('/api/chat', {
         method: 'POST',

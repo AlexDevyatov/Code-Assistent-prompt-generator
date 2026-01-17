@@ -21,22 +21,44 @@ class ChatRequest(BaseModel):
 def _prepare_messages(request: ChatRequest) -> List[Dict[str, str]]:
     """
     Подготовка сообщений из запроса
+    Отправляет только system_prompt и текущий запрос пользователя (без истории)
     
     Args:
         request: Запрос с промптом или сообщениями
     
     Returns:
-        Список сообщений в формате для API
+        Список сообщений в формате для API (только system_prompt + текущий запрос)
     """
-    if request.messages:
-        messages = []
-        if request.system_prompt:
-            messages.append({"role": "system", "content": request.system_prompt})
-        messages.extend(request.messages)
-    elif request.prompt:
-        messages = [{"role": "user", "content": request.prompt}]
+    messages = []
+    
+    # Добавляем system_prompt, если он есть
+    if request.system_prompt:
+        messages.append({"role": "system", "content": request.system_prompt})
+    
+    # Определяем текущий запрос пользователя
+    user_content = None
+    if request.prompt:
+        # Если есть prompt, используем его
+        user_content = request.prompt
+    elif request.messages:
+        # Если есть messages, берем только последнее сообщение от пользователя
+        for msg in reversed(request.messages):
+            if isinstance(msg, dict) and msg.get("role") == "user":
+                user_content = msg.get("content")
+                break
+        # Если не нашли user сообщение, берем последнее сообщение
+        if not user_content and len(request.messages) > 0:
+            last_msg = request.messages[-1]
+            if isinstance(last_msg, dict):
+                user_content = last_msg.get("content", "")
     else:
         raise HTTPException(status_code=400, detail="Either 'prompt' or 'messages' must be provided")
+    
+    # Добавляем только текущий запрос пользователя
+    if user_content:
+        messages.append({"role": "user", "content": user_content})
+    else:
+        raise HTTPException(status_code=400, detail="No user message found in request")
     
     return messages
 

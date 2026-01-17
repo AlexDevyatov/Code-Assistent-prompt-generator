@@ -35,21 +35,21 @@ function ReasoningComparison() {
     prompt: string,
     systemPrompt?: string
   ): Promise<void> => {
-    const messages = []
-    if (systemPrompt) {
-      messages.push({ role: 'system', content: systemPrompt })
-    }
-    messages.push({ role: 'user', content: prompt })
-
     try {
+      // Отправляем только system_prompt и текущий запрос (без истории)
+      const requestBody: any = {
+        prompt: prompt,
+      }
+      if (systemPrompt) {
+        requestBody.system_prompt = systemPrompt
+      }
+
       const res = await fetch('/api/chat/stream', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          messages: messages,
-        }),
+        body: JSON.stringify(requestBody),
       })
 
       if (!res.ok) {
@@ -206,15 +206,13 @@ function ReasoningComparison() {
           // Сначала получаем промпт (не streaming, т.к. короткий)
           const promptPrompt = PROMPT_GENERATOR_PROMPT_TEMPLATE(task)
           
-          // Получаем промпт обычным способом
+          // Получаем промпт обычным способом (отправляем только system_prompt и текущий запрос)
           const res = await fetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              messages: [
-                { role: 'system', content: PROMPT_GENERATOR_SYSTEM },
-                { role: 'user', content: promptPrompt }
-              ],
+              system_prompt: PROMPT_GENERATOR_SYSTEM,
+              prompt: promptPrompt
             }),
           })
           const data = await res.json()
