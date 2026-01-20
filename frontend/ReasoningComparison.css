@@ -4,6 +4,7 @@
   padding-bottom: 40px;
   overflow-y: auto;
   height: 100vh;
+  -webkit-overflow-scrolling: touch;
 }
 
 .nav-bar {
@@ -281,24 +282,139 @@
 }
 
 @media (max-width: 768px) {
+  .reasoning-page {
+    overflow-x: hidden;
+  }
+
+  .reasoning-container {
+    padding: 20px 12px;
+  }
+
+  .reasoning-header {
+    margin-bottom: 24px;
+  }
+
   .reasoning-header h1 {
-    font-size: 2rem;
+    font-size: 1.75rem;
+    margin-bottom: 0.75rem;
   }
 
   .reasoning-description {
-    font-size: 1rem;
+    font-size: 0.95rem;
+    padding: 0 8px;
+  }
+
+  .task-input-section {
+    padding: 20px;
+    margin-bottom: 24px;
+  }
+
+  .task-textarea {
+    padding: 12px;
+    font-size: 15px;
+    min-height: 100px;
+  }
+
+  .task-submit-button {
+    padding: 12px 20px;
+    font-size: 15px;
+    width: 100%;
+  }
+
+  .results-section {
+    margin-top: 24px;
+  }
+
+  .results-section h2 {
+    font-size: 1.5rem;
+    padding: 16px 0;
+    margin-bottom: 16px;
   }
 
   .results-grid {
     gap: 16px;
   }
 
-  .task-input-section {
+  .result-card {
+    padding: 16px;
+  }
+
+  .result-header h3 {
+    font-size: 1.1rem;
+  }
+
+  .result-text {
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  .example-section {
     padding: 20px;
+    margin-top: 24px;
+  }
+
+  .example-section h3 {
+    font-size: 1.25rem;
+    margin-bottom: 16px;
+  }
+
+  .example-list li {
+    padding: 10px 12px;
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 480px) {
+  .reasoning-container {
+    padding: 16px 8px;
+  }
+
+  .reasoning-header h1 {
+    font-size: 1.5rem;
+  }
+
+  .reasoning-description {
+    font-size: 0.9rem;
+  }
+
+  .task-input-section {
+    padding: 16px;
+  }
+
+  .task-textarea {
+    padding: 10px;
+    font-size: 14px;
+  }
+
+  .task-submit-button {
+    padding: 10px 16px;
+    font-size: 14px;
+  }
+
+  .results-section h2 {
+    font-size: 1.25rem;
+    padding: 12px 0;
   }
 
   .result-card {
+    padding: 12px;
+  }
+
+  .result-header h3 {
+    font-size: 1rem;
+  }
+
+  .result-text {
+    font-size: 13px;
+  }
+
+  .example-section {
     padding: 16px;
+  }
+
+  .example-list li {
+    padding: 8px 10px;
+    font-size: 13px;
   }
 }
 
