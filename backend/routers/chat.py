@@ -16,6 +16,7 @@ class ChatRequest(BaseModel):
     prompt: Optional[str] = None
     system_prompt: Optional[str] = None
     messages: Optional[List[Dict[str, str]]] = None
+    temperature: Optional[float] = None
 
 
 def _prepare_messages(request: ChatRequest) -> List[Dict[str, str]]:
@@ -70,9 +71,10 @@ async def chat_stream(request: ChatRequest):
         logger.info(f"Received streaming chat request: messages={bool(request.messages)}, prompt={bool(request.prompt)}")
         
         messages = _prepare_messages(request)
+        temperature = request.temperature if request.temperature is not None else 0.3
         
         async def generate():
-            async for chunk in stream_deepseek_api(messages):
+            async for chunk in stream_deepseek_api(messages, temperature=temperature):
                 yield f"data: {chunk}\n\n"
         
         return StreamingResponse(generate(), media_type="text/event-stream")
@@ -91,12 +93,13 @@ async def chat(request: ChatRequest):
         logger.info(f"Received chat request: messages={bool(request.messages)}, prompt={bool(request.prompt)}")
         
         messages = _prepare_messages(request)
+        temperature = request.temperature if request.temperature is not None else 0.3
         
-        logger.info(f"Sending request to DeepSeek API with {len(messages)} messages")
+        logger.info(f"Sending request to DeepSeek API with {len(messages)} messages, temperature={temperature}")
         if request.system_prompt:
             logger.info(f"System prompt: {request.system_prompt[:100]}...")
         
-        data = await call_deepseek_api(messages)
+        data = await call_deepseek_api(messages, temperature=temperature)
         
         # Извлекаем ответ из структуры DeepSeek API
         if "choices" in data and len(data["choices"]) > 0:
