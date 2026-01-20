@@ -45,6 +45,12 @@ async def call_llama_api(
         "max_tokens": max_tokens or 1000
     }
     
+    # Проверяем, что используется правильный URL (не старый api-inference)
+    if "api-inference.huggingface.co" in HUGGINGFACE_API_URL:
+        error_msg = f"ERROR: Old API URL detected! Please update HUGGINGFACE_API_URL in config.py. Current: {HUGGINGFACE_API_URL}"
+        logger.error(error_msg)
+        raise ValueError("Configuration error: Old API URL detected. Please restart the server after updating the configuration.")
+    
     logger.info(f"Llama API request URL: {HUGGINGFACE_API_URL}")
     logger.info(f"Llama API request payload: {json.dumps(payload, indent=2)}")
     
@@ -145,6 +151,13 @@ async def stream_llama_api(
         "max_tokens": max_tokens or 1000,
         "stream": True
     }
+    
+    # Проверяем, что используется правильный URL (не старый api-inference)
+    if "api-inference.huggingface.co" in HUGGINGFACE_API_URL:
+        error_msg = f"ERROR: Old API URL detected! Please update HUGGINGFACE_API_URL in config.py. Current: {HUGGINGFACE_API_URL}"
+        logger.error(error_msg)
+        yield json.dumps({"error": "Configuration error: Old API URL detected. Please restart the server after updating the configuration."})
+        return
     
     logger.info(f"Llama streaming API request URL: {HUGGINGFACE_API_URL}")
     logger.info(f"Llama streaming API request payload: {json.dumps(payload, indent=2)}")
