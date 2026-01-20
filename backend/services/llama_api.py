@@ -1,4 +1,4 @@
-"""Сервис для работы с Hugging Face Inference API (Llama 3.2-1B)"""
+"""Сервис для работы с Hugging Face Inference API (Llama 3.2-1B-Instruct)"""
 import json
 import logging
 from typing import List, Dict, Optional, AsyncGenerator

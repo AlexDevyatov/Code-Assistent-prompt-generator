@@ -10,11 +10,11 @@ DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions"
 API_KEY = os.getenv("DEEPSEEK_API_KEY")
 MAX_TOKENS = int(os.getenv("MAX_TOKENS", "1000"))
 
-# Hugging Face API настройки (для Llama 3.2-1B)
-# Используем новый router API вместо устаревшего api-inference
-# Пробуем использовать text generation endpoint, так как chat completions может не поддерживаться для этой модели
-HUGGINGFACE_API_URL = "https://router.huggingface.co/hf-inference/models/meta-llama/Llama-3.2-1B"
-HUGGINGFACE_MODEL = "meta-llama/Llama-3.2-1B"  # Модель передается в теле запроса
+# Hugging Face API настройки (для Llama 3.2-1B-Instruct)
+# Используем Instruct версию модели, которая поддерживает instruction/chat задачи
+# Используем text generation endpoint через router API
+HUGGINGFACE_API_URL = "https://router.huggingface.co/hf-inference/models/meta-llama/Llama-3.2-1B-Instruct"
+HUGGINGFACE_MODEL = "meta-llama/Llama-3.2-1B-Instruct"  # Модель передается в теле запроса
 HUGGINGFACE_API_KEY = os.getenv("HUGGINGFACE_API_KEY")  # Опционально, требуется только для использования Llama API
 
 # Настройки приложения
