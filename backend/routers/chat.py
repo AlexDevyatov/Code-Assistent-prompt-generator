@@ -17,6 +17,7 @@ class ChatRequest(BaseModel):
     system_prompt: Optional[str] = None
     messages: Optional[List[Dict[str, str]]] = None
     temperature: Optional[float] = None
+    max_tokens: Optional[int] = None
 
 
 def _prepare_messages(request: ChatRequest) -> List[Dict[str, str]]:
@@ -72,9 +73,10 @@ async def chat_stream(request: ChatRequest):
         
         messages = _prepare_messages(request)
         temperature = request.temperature if request.temperature is not None else 0.3
+        max_tokens = request.max_tokens
         
         async def generate():
-            async for chunk in stream_deepseek_api(messages, temperature=temperature):
+            async for chunk in stream_deepseek_api(messages, temperature=temperature, max_tokens=max_tokens):
                 yield f"data: {chunk}\n\n"
         
         return StreamingResponse(generate(), media_type="text/event-stream")
@@ -94,12 +96,13 @@ async def chat(request: ChatRequest):
         
         messages = _prepare_messages(request)
         temperature = request.temperature if request.temperature is not None else 0.3
+        max_tokens = request.max_tokens
         
-        logger.info(f"Sending request to DeepSeek API with {len(messages)} messages, temperature={temperature}")
+        logger.info(f"Sending request to DeepSeek API with {len(messages)} messages, temperature={temperature}, max_tokens={max_tokens}")
         if request.system_prompt:
             logger.info(f"System prompt: {request.system_prompt[:100]}...")
         
-        data = await call_deepseek_api(messages, temperature=temperature)
+        data = await call_deepseek_api(messages, temperature=temperature, max_tokens=max_tokens)
         
         # Извлекаем ответ из структуры DeepSeek API
         if "choices" in data and len(data["choices"]) > 0:

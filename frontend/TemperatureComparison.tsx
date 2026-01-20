@@ -41,6 +41,7 @@ function TemperatureComparison() {
       const requestBody: any = {
         prompt: prompt,
         temperature: temperature,
+        max_tokens: 500,
       }
       if (systemPrompt) {
         requestBody.system_prompt = systemPrompt
@@ -200,6 +201,7 @@ ${responsesText}
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           prompt: analysisPrompt,
+          max_tokens: 500,
         }),
       })
 
