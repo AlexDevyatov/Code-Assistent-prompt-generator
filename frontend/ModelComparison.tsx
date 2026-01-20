@@ -163,8 +163,17 @@ function ModelComparison() {
         body: JSON.stringify(requestBody),
       })
 
+      console.log('Llama API response status:', res.status, res.statusText)
+
       if (!res.ok) {
-        const errorData = await res.json().catch(() => ({ detail: 'Unknown error' }))
+        const errorText = await res.text()
+        console.error('Llama API error response:', errorText)
+        let errorData
+        try {
+          errorData = JSON.parse(errorText)
+        } catch {
+          errorData = { detail: errorText || `HTTP error! status: ${res.status}` }
+        }
         throw new Error(errorData.detail || `HTTP error! status: ${res.status}`)
       }
 
@@ -217,10 +226,18 @@ function ModelComparison() {
                   )
                 )
               } else if (data.error) {
+                console.error('Llama API error in stream:', data.error)
                 throw new Error(data.error)
+              } else {
+                console.warn('Llama API unexpected data format:', data)
               }
             } catch (e) {
-              // Игнорируем ошибки парсинга отдельных чанков
+              // Логируем ошибки парсинга для отладки
+              if (e instanceof SyntaxError) {
+                console.warn('Llama API JSON parse error:', e, 'dataStr:', dataStr)
+              } else if (e instanceof Error && e.message) {
+                throw e
+              }
             }
           }
         }
@@ -228,14 +245,17 @@ function ModelComparison() {
 
       if (currentRequestIdRef.current !== requestId) return
       
+      console.log('Llama API stream completed, response length:', fullResponse.length)
+      
       setResults((prev) =>
         prev.map((r) =>
           r.id === resultId
-            ? { ...r, isLoading: false, progress: 100, response: fullResponse }
+            ? { ...r, isLoading: false, progress: 100, response: fullResponse || '(Пустой ответ)' }
             : r
         )
       )
     } catch (error) {
+      console.error('Llama API error:', error)
       if (currentRequestIdRef.current !== requestId) return
       
       setResults((prev) =>
@@ -245,6 +265,7 @@ function ModelComparison() {
                 ...r,
                 isLoading: false,
                 error: error instanceof Error ? error.message : 'Произошла ошибка',
+                response: '', // Очищаем ответ при ошибке
               }
             : r
         )

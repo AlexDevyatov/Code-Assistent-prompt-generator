@@ -105,16 +105,32 @@ async def llama(request: LlamaRequest):
         data = await call_llama_api(messages, temperature=temperature, max_tokens=max_tokens)
         
         # Извлекаем ответ из структуры Hugging Face API
-        # Формат ответа: [{"generated_text": "..."}]
+        # Формат ответа может быть: [{"generated_text": "..."}] или {"generated_text": "..."}
+        generated_text = ""
         if isinstance(data, list) and len(data) > 0:
             generated_text = data[0].get("generated_text", "")
+            logger.info(f"Extracted text from list format, length: {len(generated_text)}")
+        elif isinstance(data, dict):
+            if "generated_text" in data:
+                generated_text = data.get("generated_text", "")
+                logger.info(f"Extracted text from dict format (generated_text), length: {len(generated_text)}")
+            elif "text" in data:
+                generated_text = data.get("text", "")
+                logger.info(f"Extracted text from dict format (text), length: {len(generated_text)}")
+        
+        if generated_text:
+            # Убираем префикс промпта, если он есть
+            messages_text = "".join([f"{m.get('role', '')}: {m.get('content', '')}" for m in messages])
+            if messages_text in generated_text:
+                generated_text = generated_text[len(messages_text):].strip()
+            
             result = {"response": generated_text}
-            logger.info("Successfully received response from Llama API")
+            logger.info(f"Successfully received response from Llama API, length: {len(generated_text)}")
             return result
         else:
             # Если формат неожиданный, пытаемся вернуть весь ответ
             logger.warning(f"Unexpected response format: {data}")
-            result = {"response": str(data)}
+            result = {"response": f"[Unexpected format: {str(data)[:500]}]"}
             return result
                 
     except HTTPException:
