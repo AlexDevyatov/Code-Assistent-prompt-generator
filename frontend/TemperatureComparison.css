@@ -196,6 +196,11 @@
   color: #c2185b;
 }
 
+.temperature-badge.temp-2 {
+  background-color: #ffebee;
+  color: #b71c1c;
+}
+
 .result-content {
   min-height: 100px;
   flex: 1;

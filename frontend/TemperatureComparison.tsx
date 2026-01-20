@@ -23,7 +23,7 @@ function TemperatureComparison() {
   const [isProcessing, setIsProcessing] = useState(false)
   const [comparison, setComparison] = useState<ComparisonMetrics | null>(null)
 
-  const temperatures = [0, 0.7, 1.2]
+  const temperatures = [0, 0.7, 1.2, 2]
 
   const callAPIStream = async (
     resultId: string,
@@ -141,7 +141,7 @@ ${r.response}
         )
         .join('\n\n')
 
-      const analysisPrompt = `Проанализируй следующие ответы на один и тот же запрос, полученные с разными значениями температуры (0, 0.7, 1.2):
+      const analysisPrompt = `Проанализируй следующие ответы на один и тот же запрос, полученные с разными значениями температуры (0, 0.7, 1.2, 2):
 
 ${responsesText}
 
@@ -162,6 +162,11 @@ ${responsesText}
 - Разнообразие: [оценка]
 
 **Температура 1.2:**
+- Точность: [оценка]
+- Креативность: [оценка]
+- Разнообразие: [оценка]
+
+**Температура 2:**
 - Точность: [оценка]
 - Креативность: [оценка]
 - Разнообразие: [оценка]
@@ -190,11 +195,12 @@ ${responsesText}
       const temp0Match = analysis.match(/Температура 0:[\s\S]*?Точность:([^\n]+)[\s\S]*?Креативность:([^\n]+)[\s\S]*?Разнообразие:([^\n]+)/i)
       const temp07Match = analysis.match(/Температура 0\.7:[\s\S]*?Точность:([^\n]+)[\s\S]*?Креативность:([^\n]+)[\s\S]*?Разнообразие:([^\n]+)/i)
       const temp12Match = analysis.match(/Температура 1\.2:[\s\S]*?Точность:([^\n]+)[\s\S]*?Креативность:([^\n]+)[\s\S]*?Разнообразие:([^\n]+)/i)
+      const temp2Match = analysis.match(/Температура 2:[\s\S]*?Точность:([^\n]+)[\s\S]*?Креативность:([^\n]+)[\s\S]*?Разнообразие:([^\n]+)/i)
 
-      if (temp0Match && temp07Match && temp12Match) {
-        metrics.accuracy = `Temp 0: ${temp0Match[1].trim()}\nTemp 0.7: ${temp07Match[1].trim()}\nTemp 1.2: ${temp12Match[1].trim()}`
-        metrics.creativity = `Temp 0: ${temp0Match[2].trim()}\nTemp 0.7: ${temp07Match[2].trim()}\nTemp 1.2: ${temp12Match[2].trim()}`
-        metrics.diversity = `Temp 0: ${temp0Match[3].trim()}\nTemp 0.7: ${temp07Match[3].trim()}\nTemp 1.2: ${temp12Match[3].trim()}`
+      if (temp0Match && temp07Match && temp12Match && temp2Match) {
+        metrics.accuracy = `Temp 0: ${temp0Match[1].trim()}\nTemp 0.7: ${temp07Match[1].trim()}\nTemp 1.2: ${temp12Match[1].trim()}\nTemp 2: ${temp2Match[1].trim()}`
+        metrics.creativity = `Temp 0: ${temp0Match[2].trim()}\nTemp 0.7: ${temp07Match[2].trim()}\nTemp 1.2: ${temp12Match[2].trim()}\nTemp 2: ${temp2Match[2].trim()}`
+        metrics.diversity = `Temp 0: ${temp0Match[3].trim()}\nTemp 0.7: ${temp07Match[3].trim()}\nTemp 1.2: ${temp12Match[3].trim()}\nTemp 2: ${temp2Match[3].trim()}`
       } else {
         // Если не удалось распарсить, просто показываем весь анализ
         metrics.accuracy = analysis
@@ -265,7 +271,7 @@ ${responsesText}
         <div className="temperature-header">
           <h1>Сравнение результатов с разными температурами</h1>
           <p className="temperature-description">
-            Введите запрос для сравнения ответов с температурами 0, 0.7 и 1.2.
+            Введите запрос для сравнения ответов с температурами 0, 0.7, 1.2 и 2.
             Система автоматически сравнит результаты по точности, креативности и разнообразию.
           </p>
         </div>
@@ -303,7 +309,9 @@ ${responsesText}
                         ? 'Детерминированная'
                         : result.temperature === 0.7
                         ? 'Сбалансированная'
-                        : 'Креативная'}
+                        : result.temperature === 1.2
+                        ? 'Креативная'
+                        : 'Максимально креативная'}
                     </span>
                   </div>
                   <div className="result-content">
