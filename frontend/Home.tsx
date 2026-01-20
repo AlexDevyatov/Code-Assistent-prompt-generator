@@ -32,6 +32,12 @@ function Home() {
               <p>Сравнение результатов с разными значениями температуры (0, 0.7, 1.2) по точности, креативности и разнообразию</p>
             </div>
           </Link>
+          <Link to="/model-comparison" className="home-link">
+            <div className="home-link-card">
+              <h2>Сравнение моделей</h2>
+              <p>Сравнение ответов от DeepSeek и Llama 3.2-1B на один и тот же запрос</p>
+            </div>
+          </Link>
         </div>
       </div>
     </div>

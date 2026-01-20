@@ -4,6 +4,7 @@ import Chat from './Chat'
 import ReasoningComparison from './ReasoningComparison'
 import SystemPromptTest from './SystemPromptTest'
 import TemperatureComparison from './TemperatureComparison'
+import ModelComparison from './ModelComparison'
 
 function App() {
   return (
@@ -14,6 +15,7 @@ function App() {
         <Route path="/reasoning" element={<ReasoningComparison />} />
         <Route path="/system-prompt" element={<SystemPromptTest />} />
         <Route path="/temperature" element={<TemperatureComparison />} />
+        <Route path="/model-comparison" element={<ModelComparison />} />
       </Routes>
     </BrowserRouter>
   )

@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.config import STATIC_DIR
-from backend.routers import chat, health
+from backend.routers import chat, health, llama
 
 # Настройка логирования
 logging.basicConfig(
@@ -28,6 +28,7 @@ app.add_middleware(
 # Подключение роутеров
 app.include_router(chat.router)
 app.include_router(health.router)
+app.include_router(llama.router)
 
 # Отдаём статические файлы из папки static
 # html=True позволяет отдавать index.html для всех маршрутов (SPA)
