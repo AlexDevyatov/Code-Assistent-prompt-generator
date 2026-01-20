@@ -229,24 +229,6 @@ async def stream_llama_api(
                 
                 # Проверяем другие ошибки статуса
                 if response.status_code >= 400:
-                    try:
-                        error_text = await response.aread()
-                        error_text_decoded = error_text.decode('utf-8', errors='ignore') if error_text else ""
-                        logger.error(f"Llama API error response (status {response.status_code}): {error_text_decoded[:1000]}")
-                        try:
-                            error_data = json.loads(error_text_decoded)
-                            logger.error(f"Llama API error JSON: {json.dumps(error_data, indent=2)}")
-                            error_msg = error_data.get("error", error_data.get("message", error_data.get("detail", f"HTTP {response.status_code}")))
-                        except:
-                            error_msg = error_text_decoded[:500] if error_text_decoded else f"HTTP {response.status_code}"
-                    except Exception as ex:
-                        logger.error(f"Failed to read error response: {ex}")
-                        error_msg = f"HTTP {response.status_code}"
-                    yield json.dumps({"error": error_msg})
-                    return
-                
-                # Проверяем статус перед чтением
-                if response.status_code >= 400:
                     # Читаем тело ответа для детальной ошибки
                     try:
                         error_text = await response.aread()
@@ -255,7 +237,14 @@ async def stream_llama_api(
                         try:
                             error_data = json.loads(error_text_decoded)
                             logger.error(f"Llama API error JSON: {json.dumps(error_data, indent=2)}")
-                            error_msg = error_data.get("error", error_data.get("message", error_data.get("detail", f"HTTP {response.status_code}")))
+                            # Обрабатываем разные форматы ошибок
+                            if isinstance(error_data, dict):
+                                if "error" in error_data and isinstance(error_data["error"], dict):
+                                    error_msg = error_data["error"].get("message", error_data["error"].get("error", f"HTTP {response.status_code}"))
+                                else:
+                                    error_msg = error_data.get("error", error_data.get("message", error_data.get("detail", f"HTTP {response.status_code}")))
+                            else:
+                                error_msg = str(error_data)[:500]
                         except:
                             error_msg = error_text_decoded[:500] if error_text_decoded else f"HTTP {response.status_code}"
                     except Exception as ex:
