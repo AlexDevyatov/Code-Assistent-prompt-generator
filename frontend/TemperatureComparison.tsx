@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import './TemperatureComparison.css'
 
@@ -22,6 +22,7 @@ function TemperatureComparison() {
   const [results, setResults] = useState<TemperatureResult[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
   const [comparison, setComparison] = useState<ComparisonMetrics | null>(null)
+  const currentRequestIdRef = useRef<string | null>(null)
 
   const temperatures = [0, 0.7, 1.2, 2]
 
@@ -29,9 +30,14 @@ function TemperatureComparison() {
     resultId: string,
     prompt: string,
     temperature: number,
+    requestId: string,
     systemPrompt?: string
   ): Promise<void> => {
     try {
+      // Проверяем, актуален ли запрос
+      if (currentRequestIdRef.current !== requestId) {
+        return
+      }
       const requestBody: any = {
         prompt: prompt,
         temperature: temperature,
@@ -62,6 +68,9 @@ function TemperatureComparison() {
         throw new Error('No response body')
       }
 
+      // Проверяем актуальность запроса перед обновлением
+      if (currentRequestIdRef.current !== requestId) return
+      
       setResults((prev) =>
         prev.map((r) =>
           r.id === resultId
@@ -85,6 +94,9 @@ function TemperatureComparison() {
               const data = JSON.parse(dataStr)
               if (data.content) {
                 fullResponse += data.content
+                // Проверяем актуальность запроса перед обновлением
+                if (currentRequestIdRef.current !== requestId) return
+                
                 setResults((prev) =>
                   prev.map((r) =>
                     r.id === resultId
@@ -107,6 +119,9 @@ function TemperatureComparison() {
         }
       }
 
+      // Проверяем актуальность запроса перед обновлением
+      if (currentRequestIdRef.current !== requestId) return
+      
       setResults((prev) =>
         prev.map((r) =>
           r.id === resultId
@@ -115,6 +130,9 @@ function TemperatureComparison() {
         )
       )
     } catch (error) {
+      // Проверяем актуальность запроса перед обновлением
+      if (currentRequestIdRef.current !== requestId) return
+      
       setResults((prev) =>
         prev.map((r) =>
           r.id === resultId
@@ -129,8 +147,12 @@ function TemperatureComparison() {
     }
   }
 
-  const analyzeResults = async (allResults: TemperatureResult[]) => {
+  const analyzeResults = async (allResults: TemperatureResult[], requestId: string) => {
     try {
+      // Проверяем актуальность запроса
+      if (currentRequestIdRef.current !== requestId) {
+        return
+      }
       const responsesText = allResults
         .filter((r) => r.response && !r.error)
         .map(
@@ -208,6 +230,9 @@ ${responsesText}
         metrics.diversity = analysis
       }
 
+      // Проверяем актуальность запроса перед обновлением
+      if (currentRequestIdRef.current !== requestId) return
+      
       setComparison(metrics)
     } catch (error) {
       console.error('Ошибка при анализе результатов:', error)
@@ -219,9 +244,20 @@ ${responsesText}
 
     if (!prompt.trim() || isProcessing) return
 
+    // Генерируем уникальный ID для нового запроса
+    const requestId = Date.now().toString()
+    currentRequestIdRef.current = requestId
+
+    // Полностью очищаем состояние перед новым запросом
     setIsProcessing(true)
     setResults([])
     setComparison(null)
+
+    // Небольшая задержка для гарантии очистки UI
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    // Проверяем, не был ли отправлен новый запрос
+    if (currentRequestIdRef.current !== requestId) return
 
     // Создаем результаты для всех температур
     const initialResults: TemperatureResult[] = temperatures.map((temp) => ({
@@ -235,14 +271,20 @@ ${responsesText}
 
     // Обрабатываем каждую температуру параллельно
     const processTemperature = async (result: TemperatureResult) => {
-      await callAPIStream(result.id, prompt, result.temperature)
+      await callAPIStream(result.id, prompt, result.temperature, requestId)
     }
 
     // Запускаем обработку всех температур параллельно
     await Promise.all(initialResults.map(processTemperature))
 
+    // Проверяем актуальность запроса
+    if (currentRequestIdRef.current !== requestId) return
+
     // Небольшая задержка для обновления состояния React
     await new Promise((resolve) => setTimeout(resolve, 300))
+
+    // Проверяем актуальность запроса
+    if (currentRequestIdRef.current !== requestId) return
 
     // Получаем актуальные результаты из состояния
     let allResultsForAnalysis: TemperatureResult[] = []
@@ -254,12 +296,18 @@ ${responsesText}
     // Дополнительная задержка для гарантии обновления состояния
     await new Promise((resolve) => setTimeout(resolve, 100))
 
+    // Проверяем актуальность запроса
+    if (currentRequestIdRef.current !== requestId) return
+
     // Запускаем анализ результатов
     if (allResultsForAnalysis.length > 0) {
-      await analyzeResults(allResultsForAnalysis)
+      await analyzeResults(allResultsForAnalysis, requestId)
     }
 
-    setIsProcessing(false)
+    // Проверяем актуальность запроса перед завершением
+    if (currentRequestIdRef.current === requestId) {
+      setIsProcessing(false)
+    }
   }
 
   return (
