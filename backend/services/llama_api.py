@@ -45,6 +45,9 @@ async def call_llama_api(
         "max_tokens": max_tokens or 1000
     }
     
+    logger.info(f"Llama API request URL: {HUGGINGFACE_API_URL}")
+    logger.info(f"Llama API request payload: {json.dumps(payload, indent=2)}")
+    
     try:
         async with httpx.AsyncClient(timeout=120.0) as client:
             response = await client.post(
@@ -84,7 +87,18 @@ async def call_llama_api(
     except httpx.HTTPStatusError as e:
         logger.error(f"HTTP error in Llama API: {str(e)}")
         try:
-            error_text = e.response.text[:500] if e.response else "Unknown error"
+            if e.response:
+                error_text = e.response.text[:1000] if e.response.text else "No error message"
+                logger.error(f"Error response body: {error_text}")
+                try:
+                    error_json = e.response.json()
+                    logger.error(f"Error response JSON: {json.dumps(error_json, indent=2)}")
+                except:
+                    pass
+        except Exception as ex:
+            logger.error(f"Failed to read error response: {ex}")
+        try:
+            error_text = e.response.text[:500] if e.response and e.response.text else "Unknown error"
         except:
             error_text = f"HTTP {e.response.status_code}" if e.response else "Unknown error"
         raise ValueError(f"HTTP {e.response.status_code if e.response else 'unknown'}: {error_text}")
@@ -131,6 +145,9 @@ async def stream_llama_api(
         "max_tokens": max_tokens or 1000,
         "stream": True
     }
+    
+    logger.info(f"Llama streaming API request URL: {HUGGINGFACE_API_URL}")
+    logger.info(f"Llama streaming API request payload: {json.dumps(payload, indent=2)}")
     
     try:
         async with httpx.AsyncClient(timeout=180.0) as client:
