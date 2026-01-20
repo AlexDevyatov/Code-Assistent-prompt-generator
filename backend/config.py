@@ -12,8 +12,8 @@ MAX_TOKENS = int(os.getenv("MAX_TOKENS", "1000"))
 
 # Hugging Face API настройки (для Llama 3.2-1B-Instruct)
 # Используем Instruct версию модели, которая поддерживает instruction/chat задачи
-# Используем text generation endpoint через router API
-HUGGINGFACE_API_URL = "https://router.huggingface.co/hf-inference/models/meta-llama/Llama-3.2-1B-Instruct"
+# Используем inference API endpoint для text generation (inputs/parameters формат)
+HUGGINGFACE_API_URL = "https://api-inference.huggingface.co/models/meta-llama/Llama-3.2-1B-Instruct"
 HUGGINGFACE_MODEL = "meta-llama/Llama-3.2-1B-Instruct"  # Модель передается в теле запроса
 HUGGINGFACE_API_KEY = os.getenv("HUGGINGFACE_API_KEY")  # Опционально, требуется только для использования Llama API
 
