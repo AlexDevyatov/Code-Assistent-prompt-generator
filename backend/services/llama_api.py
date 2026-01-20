@@ -75,13 +75,23 @@ async def call_llama_api(
                 return [{"generated_text": content}]
             
             return data
+    except httpx.TimeoutException as e:
+        logger.error(f"Timeout error in Llama API: {str(e)}")
+        raise ValueError(f"Request timeout: The API did not respond in time. Please try again.")
+    except httpx.NetworkError as e:
+        logger.error(f"Network error in Llama API: {str(e)}")
+        raise ValueError(f"Network error: Unable to connect to Hugging Face API. Please check your internet connection.")
     except httpx.HTTPStatusError as e:
         logger.error(f"HTTP error in Llama API: {str(e)}")
-        raise ValueError(f"HTTP {e.response.status_code}: {e.response.text[:200]}")
+        try:
+            error_text = e.response.text[:500] if e.response else "Unknown error"
+        except:
+            error_text = f"HTTP {e.response.status_code}" if e.response else "Unknown error"
+        raise ValueError(f"HTTP {e.response.status_code if e.response else 'unknown'}: {error_text}")
     except ValueError:
         raise
     except Exception as e:
-        logger.error(f"Error in Llama API: {str(e)}")
+        logger.error(f"Unexpected error in Llama API: {str(e)}", exc_info=True)
         raise ValueError(f"Error calling Llama API: {str(e)}")
 
 
@@ -130,16 +140,33 @@ async def stream_llama_api(
                 headers=headers,
                 json=payload
             ) as response:
-                # Проверяем статус ответа
+                # Проверяем статус ответа перед чтением
                 if response.status_code == 503:
                     # Модель еще загружается
-                    error_text = await response.aread()
                     try:
-                        error_data = json.loads(error_text)
-                        error_msg = error_data.get("error", "Model is loading, please try again in a few moments")
+                        error_text = await response.aread()
+                        try:
+                            error_data = json.loads(error_text)
+                            error_msg = error_data.get("error", "Model is loading, please try again in a few moments")
+                        except:
+                            error_msg = "Model is loading, please try again in a few moments"
                     except:
                         error_msg = "Model is loading, please try again in a few moments"
                     yield json.dumps({"error": f"Model is loading: {error_msg}"})
+                    return
+                
+                # Проверяем другие ошибки статуса
+                if response.status_code >= 400:
+                    try:
+                        error_text = await response.aread()
+                        try:
+                            error_data = json.loads(error_text)
+                            error_msg = error_data.get("error", error_data.get("message", f"HTTP {response.status_code}"))
+                        except:
+                            error_msg = error_text.decode('utf-8', errors='ignore')[:500] if error_text else f"HTTP {response.status_code}"
+                    except:
+                        error_msg = f"HTTP {response.status_code}"
+                    yield json.dumps({"error": error_msg})
                     return
                 
                 response.raise_for_status()
@@ -170,11 +197,21 @@ async def stream_llama_api(
                             logger.error(f"Error processing SSE line: {e}")
                             continue
                 
+    except httpx.TimeoutException as e:
+        logger.error(f"Timeout error in Llama streaming: {str(e)}")
+        yield json.dumps({"error": "Request timeout: The API did not respond in time. Please try again."})
+    except httpx.NetworkError as e:
+        logger.error(f"Network error in Llama streaming: {str(e)}")
+        yield json.dumps({"error": "Network error: Unable to connect to Hugging Face API. Please check your internet connection."})
     except httpx.HTTPStatusError as e:
         logger.error(f"HTTP error in Llama streaming: {str(e)}")
-        error_msg = f"HTTP {e.response.status_code}: {e.response.text[:200]}"
+        try:
+            error_text = e.response.text[:500] if e.response else "Unknown error"
+        except:
+            error_text = f"HTTP {e.response.status_code}" if e.response else "Unknown error"
+        error_msg = f"HTTP {e.response.status_code if e.response else 'unknown'}: {error_text}"
         yield json.dumps({"error": error_msg})
     except Exception as e:
-        logger.error(f"Streaming error: {str(e)}")
-        yield json.dumps({"error": str(e)})
+        logger.error(f"Unexpected error in Llama streaming: {str(e)}", exc_info=True)
+        yield json.dumps({"error": f"Error: {str(e)}"})
 

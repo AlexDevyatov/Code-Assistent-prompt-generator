@@ -155,18 +155,29 @@ function ModelComparison() {
         requestBody.system_prompt = systemPrompt
       }
 
-      const res = await fetch('/api/llama/stream', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody),
-      })
+      let res: Response
+      try {
+        res = await fetch('/api/llama/stream', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(requestBody),
+        })
+      } catch (error) {
+        console.error('Llama API network error:', error)
+        throw new Error('Network error: Unable to connect to server. Please check your internet connection.')
+      }
 
       console.log('Llama API response status:', res.status, res.statusText)
 
       if (!res.ok) {
-        const errorText = await res.text()
+        let errorText = ''
+        try {
+          errorText = await res.text()
+        } catch (e) {
+          errorText = `HTTP error! status: ${res.status}`
+        }
         console.error('Llama API error response:', errorText)
         let errorData
         try {
