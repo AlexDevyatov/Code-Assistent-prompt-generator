@@ -28,41 +28,21 @@ async def call_llama_api(
     if not HUGGINGFACE_API_KEY:
         raise ValueError("HUGGINGFACE_API_KEY not found in environment variables")
     
-    # Используем text generation endpoint через новый router
-    # Преобразуем messages в текстовый промпт
+    # Используем chat completions endpoint через router API
     logger.info(f"Llama request: {len(messages)} messages, temperature={temperature}, max_tokens={max_tokens}")
-    
-    # Формируем промпт из сообщений
-    prompt_parts = []
-    for msg in messages:
-        role = msg.get("role", "")
-        content = msg.get("content", "")
-        if role == "system":
-            prompt_parts.append(f"System: {content}\n\n")
-        elif role == "user":
-            prompt_parts.append(f"User: {content}\n\n")
-        elif role == "assistant":
-            prompt_parts.append(f"Assistant: {content}\n\n")
-    
-    prompt = "".join(prompt_parts) + "Assistant:"
     
     headers = {
         "Authorization": f"Bearer {HUGGINGFACE_API_KEY}",
         "Content-Type": "application/json"
     }
     
-    # Text generation endpoint использует формат inputs/parameters
+    # Chat completions endpoint использует OpenAI-совместимый формат
     payload = {
-        "inputs": prompt,
-        "parameters": {
-            "temperature": temperature,
-            "max_new_tokens": max_tokens or 1000,
-            "return_full_text": False
-        }
+        "model": HUGGINGFACE_MODEL,
+        "messages": messages,
+        "temperature": temperature,
+        "max_tokens": max_tokens or 1000
     }
-    
-    # Используем inference API endpoint для text generation
-    # Это правильный endpoint для формата inputs/parameters
     
     logger.info(f"Llama API request URL: {HUGGINGFACE_API_URL}")
     logger.info(f"Llama API request payload: {json.dumps(payload, indent=2)}")
@@ -90,19 +70,17 @@ async def call_llama_api(
             logger.info(f"Llama API response type: {type(data)}, keys: {data.keys() if isinstance(data, dict) else 'list'}")
             logger.info(f"Llama API response preview: {str(data)[:500]}")
             
-            # Text generation API возвращает ответ в формате [{"generated_text": "..."}]
-            if isinstance(data, list) and len(data) > 0:
-                generated_text = data[0].get("generated_text", "")
-                # Убираем префикс промпта, если он есть
-                if generated_text.startswith(prompt):
-                    generated_text = generated_text[len(prompt):].strip()
-                return [{"generated_text": generated_text}]
-            elif isinstance(data, dict) and "generated_text" in data:
-                generated_text = data.get("generated_text", "")
-                if generated_text.startswith(prompt):
-                    generated_text = generated_text[len(prompt):].strip()
-                return [{"generated_text": generated_text}]
+            # Chat completions API возвращает ответ в формате OpenAI
+            # {"choices": [{"message": {"content": "..."}}]}
+            if isinstance(data, dict) and "choices" in data:
+                choices = data.get("choices", [])
+                if len(choices) > 0:
+                    content = choices[0].get("message", {}).get("content", "")
+                    # Возвращаем в формате, совместимом со старым кодом
+                    return [{"generated_text": content}]
             
+            # Fallback для неожиданного формата
+            logger.warning(f"Unexpected response format: {data}")
             return data
     except httpx.TimeoutException as e:
         logger.error(f"Timeout error in Llama API: {str(e)}")
@@ -155,44 +133,22 @@ async def stream_llama_api(
         yield json.dumps({"error": "HUGGINGFACE_API_KEY not found in environment variables"})
         return
     
-    # Используем text generation endpoint через новый router
-    # Преобразуем messages в текстовый промпт
+    # Используем chat completions endpoint через router API
     logger.info(f"Llama streaming request: {len(messages)} messages, temperature={temperature}, max_tokens={max_tokens}")
-    
-    # Формируем промпт из сообщений
-    prompt_parts = []
-    for msg in messages:
-        role = msg.get("role", "")
-        content = msg.get("content", "")
-        if role == "system":
-            prompt_parts.append(f"System: {content}\n\n")
-        elif role == "user":
-            prompt_parts.append(f"User: {content}\n\n")
-        elif role == "assistant":
-            prompt_parts.append(f"Assistant: {content}\n\n")
-    
-    prompt = "".join(prompt_parts) + "Assistant:"
     
     headers = {
         "Authorization": f"Bearer {HUGGINGFACE_API_KEY}",
         "Content-Type": "application/json"
     }
     
-    # Text generation endpoint использует формат inputs/parameters
+    # Chat completions endpoint использует OpenAI-совместимый формат с streaming
     payload = {
-        "inputs": prompt,
-        "parameters": {
-            "temperature": temperature,
-            "max_new_tokens": max_tokens or 1000,
-            "return_full_text": False
-        },
-        "options": {
-            "wait_for_model": True
-        }
+        "model": HUGGINGFACE_MODEL,
+        "messages": messages,
+        "temperature": temperature,
+        "max_tokens": max_tokens or 1000,
+        "stream": True
     }
-    
-    # Используем inference API endpoint для text generation
-    # Это правильный endpoint для формата inputs/parameters
     
     logger.info(f"Llama streaming API request URL: {HUGGINGFACE_API_URL}")
     logger.info(f"Llama streaming API request payload: {json.dumps(payload, indent=2)}")
@@ -248,39 +204,34 @@ async def stream_llama_api(
                 
                 response.raise_for_status()
                 
-                # Text generation endpoint может не поддерживать streaming напрямую
-                # Читаем весь ответ и эмулируем streaming
-                data = await response.aread()
-                data_text = data.decode('utf-8', errors='ignore') if data else ""
-                
-                try:
-                    response_data = json.loads(data_text)
-                    # Формат: [{"generated_text": "..."}] или {"generated_text": "..."}
-                    generated_text = ""
-                    if isinstance(response_data, list) and len(response_data) > 0:
-                        generated_text = response_data[0].get("generated_text", "")
-                    elif isinstance(response_data, dict):
-                        generated_text = response_data.get("generated_text", "")
+                # Chat completions API с streaming возвращает Server-Sent Events (SSE)
+                # Формат: "data: {json}\n\n"
+                async for line in response.aiter_lines():
+                    if not line:
+                        continue
                     
-                    if generated_text:
-                        # Убираем префикс промпта
-                        if generated_text.startswith(prompt):
-                            generated_text = generated_text[len(prompt):].strip()
+                    # Пропускаем служебные строки SSE
+                    if line.startswith("data: "):
+                        data_str = line[6:]  # Убираем "data: "
+                        if data_str.strip() == "[DONE]":
+                            break
                         
-                        # Эмулируем streaming, отправляя текст по частям
-                        chunk_size = 10
-                        for i in range(0, len(generated_text), chunk_size):
-                            chunk = generated_text[i:i + chunk_size]
-                            yield json.dumps({"content": chunk})
-                    else:
-                        logger.warning(f"No generated_text in response: {response_data}")
-                        yield json.dumps({"error": "No text generated"})
-                except json.JSONDecodeError as e:
-                    logger.error(f"Failed to parse response JSON: {e}, response: {data_text[:500]}")
-                    yield json.dumps({"error": f"Failed to parse API response: {str(e)}"})
-                except Exception as e:
-                    logger.error(f"Error processing response: {e}")
-                    yield json.dumps({"error": str(e)})
+                        try:
+                            chunk_data = json.loads(data_str)
+                            # Формат OpenAI streaming: {"choices": [{"delta": {"content": "..."}}]}
+                            if isinstance(chunk_data, dict) and "choices" in chunk_data:
+                                choices = chunk_data.get("choices", [])
+                                if len(choices) > 0:
+                                    delta = choices[0].get("delta", {})
+                                    content = delta.get("content", "")
+                                    if content:
+                                        yield json.dumps({"content": content})
+                        except json.JSONDecodeError as e:
+                            logger.warning(f"Failed to parse SSE chunk: {e}, line: {line[:100]}")
+                            continue
+                    elif line.startswith(":"):
+                        # Комментарии SSE, пропускаем
+                        continue
                 
     except httpx.TimeoutException as e:
         logger.error(f"Timeout error in Llama streaming: {str(e)}")
