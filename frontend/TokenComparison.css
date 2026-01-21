@@ -58,13 +58,32 @@
 }
 
 .token-input-section {
-  max-width: 900px;
+  max-width: 1400px;
   margin: 0 auto 24px;
   display: flex;
   flex-direction: column;
   gap: 10px;
   position: relative;
   z-index: 1;
+}
+
+.prompts-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+
+.prompt-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.prompt-label {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #495057;
+  margin-bottom: 4px;
 }
 
 .token-textarea {
@@ -452,6 +471,10 @@
 @media (max-width: 768px) {
   .token-header h1 {
     font-size: 2rem;
+  }
+
+  .prompts-grid {
+    grid-template-columns: 1fr;
   }
 
   .results-grid {

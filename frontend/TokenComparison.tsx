@@ -24,7 +24,11 @@ interface TokenResult {
 }
 
 function TokenComparison() {
-  const [basePrompt, setBasePrompt] = useState('')
+  const [prompts, setPrompts] = useState({
+    short: '',
+    long: '',
+    limit: ''
+  })
   const [results, setResults] = useState<TokenResult[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
   const [overallProgress, setOverallProgress] = useState(0)
@@ -43,102 +47,6 @@ function TokenComparison() {
     return Math.max(byChars, byWords, 1)
   }
 
-  const requestDeepSeekText = async (prompt: string, maxTokens: number): Promise<string> => {
-    const res = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        prompt,
-        temperature: 0.3,
-        max_tokens: maxTokens,
-      }),
-    })
-
-    if (!res.ok) {
-      const errorData = await res.json().catch(() => ({ detail: 'Unknown error' }))
-      throw new Error(errorData.detail || `HTTP error! status: ${res.status}`)
-    }
-
-    const data = await res.json()
-    return (data.response || '').trim()
-  }
-
-  /**
-   * Генерация варианта промпта ЧЕРЕЗ DeepSeek:
-   * - short: просим сжать до ~targetTokens
-   * - long/limit: наращиваем итеративно (несколькими вызовами), чтобы не получить случайно короткий текст
-   */
-  const generateVariantViaDeepSeek = async (
-    input: string,
-    targetTokens: number,
-    maxTokens: number,
-    variantType: 'short' | 'long' | 'limit',
-    onStatus?: (s: string, progress?: number) => void
-  ): Promise<{ prompt: string; estimatedTokens: number }> => {
-    const seed = input.trim()
-    if (!seed) return { prompt: '', estimatedTokens: 0 }
-
-    const trimToMax = (text: string) => {
-      let out = text
-      while (estimateTokens(out) > maxTokens) {
-        out = out.slice(0, Math.max(1, out.length - 1000))
-      }
-      return out
-    }
-
-    try {
-      if (variantType === 'short') {
-        onStatus?.('Используется исходный промпт', 100)
-        return { prompt: seed, estimatedTokens: estimateTokens(seed) }
-      }
-
-      // long / limit: итеративно наращиваем, пока не достигнем targetTokens
-      const perCallMaxTokens = 2000 // безопасный размер чанка
-      const maxIters = variantType === 'long' ? 8 : 24
-
-      onStatus?.('Готовлю базовую развернутую версию…', 5)
-      const firstInstruction =
-        `Разверни следующий промпт значительно подробнее, добавив структуры, критерии, детали, примеры и ограничения. ` +
-        `Верни ТОЛЬКО итоговый промпт без пояснений.\n\n` +
-        seed
-      let out = await requestDeepSeekText(firstInstruction, perCallMaxTokens)
-      if (!out) out = seed
-      out = trimToMax(out)
-
-      for (let i = 0; i < maxIters && estimateTokens(out) < targetTokens; i++) {
-        const currentProgress = Math.min(
-          95,
-          5 + Math.round((estimateTokens(out) / targetTokens) * 90)
-        )
-        onStatus?.(
-          `Наращиваю промпт… ${Math.round((estimateTokens(out) / targetTokens) * 100)}%`,
-          currentProgress
-        )
-
-        const continueInstruction =
-          `Продолжи РАСШИРЯТЬ и УТОЧНЯТЬ промпт ниже, добавляя больше деталей, примеров, ` +
-          `edge-cases, критериев качества, входных/выходных форматов. ` +
-          `Верни ТОЛЬКО ДОПОЛНЕНИЕ, которое нужно ПРИБАВИТЬ в конец (без вступления/заголовков).\n\n` +
-          out
-
-        const addition = await requestDeepSeekText(continueInstruction, perCallMaxTokens)
-        if (!addition) break
-        out = trimToMax(`${out}\n\n${addition}`)
-
-        // гарантируем, что long не станет меньше short (и вообще растёт)
-        if (estimateTokens(out) <= estimateTokens(seed) && i > 0) break
-      }
-
-      // финальная подгонка: не превышаем maxTokens (особенно важно для limit=30000)
-      out = trimToMax(out)
-
-      // если по какой-то причине получилось сильно меньше target — всё равно возвращаем то, что есть
-      return { prompt: out, estimatedTokens: estimateTokens(out) }
-    } catch (error) {
-      console.error('Error generating variant prompt:', error)
-      return { prompt: seed, estimatedTokens: estimateTokens(seed) }
-    }
-  }
 
   const callAPI = async (
     resultId: string,
@@ -227,7 +135,7 @@ function TokenComparison() {
 
   const handleTest = async () => {
     if (isProcessing) return
-    if (!basePrompt.trim()) return
+    if (!prompts.short.trim() && !prompts.long.trim() && !prompts.limit.trim()) return
 
     // Генерируем уникальный ID для нового запроса
     const requestId = Date.now().toString()
@@ -244,157 +152,41 @@ function TokenComparison() {
     // Проверяем, не был ли отправлен новый запрос
     if (currentRequestIdRef.current !== requestId) return
 
-    // Создаем результаты с пустыми промптами (будут заполнены после генерации)
-    const initialResults: TokenResult[] = [
-      {
-        id: 'short',
-        type: 'short',
-        prompt: '',
-        response: '',
-        usage: null,
-        isLoading: true,
-        promptLength: 0,
-        estimatedPromptTokens: 0,
-        phase: 'generating',
-        progress: 0,
-      },
-      {
-        id: 'long',
-        type: 'long',
-        prompt: '',
-        response: '',
-        usage: null,
-        isLoading: true,
-        promptLength: 0,
-        estimatedPromptTokens: 0,
-        phase: 'generating',
-        progress: 0,
-      },
-      {
-        id: 'limit',
-        type: 'limit',
-        prompt: '',
-        response: '',
-        usage: null,
-        isLoading: true,
-        promptLength: 0,
-        estimatedPromptTokens: 0,
-        phase: 'generating',
-        progress: 0,
-      },
-    ]
+    // Создаем результаты с введенными промптами
+    const promptsToTest = [
+      { id: 'short', prompt: prompts.short.trim(), type: 'short' as const },
+      { id: 'long', prompt: prompts.long.trim(), type: 'long' as const },
+      { id: 'limit', prompt: prompts.limit.trim(), type: 'limit' as const },
+    ].filter(p => p.prompt) // Фильтруем только непустые промпты
+
+    if (promptsToTest.length === 0) {
+      setIsProcessing(false)
+      return
+    }
+
+    const initialResults: TokenResult[] = promptsToTest.map(({ id, prompt, type }) => ({
+      id,
+      type,
+      prompt,
+      response: '',
+      usage: null,
+      isLoading: true,
+      promptLength: prompt.length,
+      estimatedPromptTokens: estimateTokens(prompt),
+      phase: 'processing',
+      progress: 0,
+    }))
 
     setResults(initialResults)
 
-    // Генерируем варианты промптов через DeepSeek API
-    const longTarget = 8000
-    const limitTarget = 30000
-
-    // Для короткого запроса используем введенный промпт как есть
-    setOverallStatus('Подготовка промптов...')
-    setOverallProgress(5)
-    
-    const short = {
-      prompt: basePrompt.trim(),
-      estimatedTokens: estimateTokens(basePrompt.trim())
-    }
-
-    setResults((prev) =>
-      prev.map((r) =>
-        r.id === 'short'
-          ? {
-              ...r,
-              prompt: short.prompt,
-              promptLength: short.prompt.length,
-              estimatedPromptTokens: short.estimatedTokens,
-              status: 'Промпт готов',
-              phase: 'processing',
-              progress: 100,
-            }
-          : r
-      )
-    )
-    if (currentRequestIdRef.current !== requestId) return
-
-    setOverallStatus('Генерация длинного промпта...')
-    setOverallProgress(15)
-
-    const long = await generateVariantViaDeepSeek(
-      basePrompt,
-      longTarget,
-      longTarget,
-      'long',
-      (s, progress) =>
-        setResults((prev) =>
-          prev.map((r) => (r.id === 'long' ? { ...r, status: s, progress, phase: 'generating' } : r))
-        )
-    )
-    if (currentRequestIdRef.current !== requestId) return
-
-    setResults((prev) =>
-      prev.map((r) =>
-        r.id === 'long'
-          ? {
-              ...r,
-              prompt: long.prompt,
-              promptLength: long.prompt.length,
-              estimatedPromptTokens: long.estimatedTokens,
-              status: 'Промпт готов',
-              phase: 'processing',
-              progress: 100,
-            }
-          : r
-      )
-    )
-    if (currentRequestIdRef.current !== requestId) return
-
-    setOverallStatus('Генерация лимитного промпта...')
-    setOverallProgress(40)
-
-    const limit = await generateVariantViaDeepSeek(
-      basePrompt,
-      limitTarget,
-      limitTarget,
-      'limit',
-      (s, progress) =>
-        setResults((prev) =>
-          prev.map((r) => (r.id === 'limit' ? { ...r, status: s, progress, phase: 'generating' } : r))
-        )
-    )
-    if (currentRequestIdRef.current !== requestId) return
-
-    setResults((prev) =>
-      prev.map((r) =>
-        r.id === 'limit'
-          ? {
-              ...r,
-              prompt: limit.prompt,
-              promptLength: limit.prompt.length,
-              estimatedPromptTokens: limit.estimatedTokens,
-              status: 'Промпт готов',
-              phase: 'processing',
-              progress: 100,
-            }
-          : r
-      )
-    )
-    if (currentRequestIdRef.current !== requestId) return
-
     setOverallStatus('Отправка запросов в DeepSeek...')
-    setOverallProgress(65)
+    setOverallProgress(10)
 
     // Обрабатываем каждый запрос последовательно (чтобы не перегружать API)
-    // Используем сгенерированные промпты
-    const promptsToTest = [
-      { id: 'short', prompt: short.prompt },
-      { id: 'long', prompt: long.prompt },
-      { id: 'limit', prompt: limit.prompt },
-    ]
-
     for (let i = 0; i < promptsToTest.length; i++) {
       if (currentRequestIdRef.current !== requestId) break
       const { id, prompt } = promptsToTest[i]
-      const progressBase = 65 + (i * 30) / promptsToTest.length
+      const progressBase = 10 + (i * 80) / promptsToTest.length
       setOverallProgress(Math.round(progressBase))
       setOverallStatus(`Обработка ${getTypeLabel(id === 'short' ? 'short' : id === 'long' ? 'long' : 'limit')}...`)
       
@@ -432,11 +224,11 @@ function TokenComparison() {
   const getTypeDescription = (type: string): string => {
     switch (type) {
       case 'short':
-        return 'Исходный промпт (без изменений)'
+        return 'Короткий промпт'
       case 'long':
-        return 'Развернутый вариант (~8000 токенов, оценка)'
+        return 'Длинный промпт'
       case 'limit':
-        return 'Почти лимитный вариант (≤ 30000 токенов, оценка)'
+        return 'Лимитный промпт'
       default:
         return ''
     }
@@ -451,29 +243,52 @@ function TokenComparison() {
         <div className="token-header">
           <h1>Подсчёт и сравнение токенов</h1>
           <p className="token-description">
-            Введите свой промпт — страница автоматически сделает 3 версии (исходный промпт, развернутый до ~8000 токенов и наращенный до ~30000 токенов),
-            затем отправит их в DeepSeek и покажет usage токенов на запрос/ответ.
+            Введите три промпта для сравнения. Каждый промпт будет отправлен в DeepSeek, и вы увидите использование токенов для каждого запроса/ответа.
           </p>
         </div>
 
         <div className="token-input-section">
-          <textarea
-            value={basePrompt}
-            onChange={(e) => setBasePrompt(e.target.value)}
-            placeholder="Введите ваш промпт..."
-            rows={6}
-            disabled={isProcessing}
-            className="token-textarea"
-          />
-          <div className="token-input-hint">
-            Короткий запрос: исходный промпт. Длинный: ~8000 токенов. Лимитный: ≤ 30000 токенов.
+          <div className="prompts-grid">
+            <div className="prompt-input-group">
+              <label className="prompt-label">Короткий промпт</label>
+              <textarea
+                value={prompts.short}
+                onChange={(e) => setPrompts(prev => ({ ...prev, short: e.target.value }))}
+                placeholder="Введите короткий промпт..."
+                rows={6}
+                disabled={isProcessing}
+                className="token-textarea"
+              />
+            </div>
+            <div className="prompt-input-group">
+              <label className="prompt-label">Длинный промпт</label>
+              <textarea
+                value={prompts.long}
+                onChange={(e) => setPrompts(prev => ({ ...prev, long: e.target.value }))}
+                placeholder="Введите длинный промпт..."
+                rows={6}
+                disabled={isProcessing}
+                className="token-textarea"
+              />
+            </div>
+            <div className="prompt-input-group">
+              <label className="prompt-label">Лимитный промпт</label>
+              <textarea
+                value={prompts.limit}
+                onChange={(e) => setPrompts(prev => ({ ...prev, limit: e.target.value }))}
+                placeholder="Введите лимитный промпт..."
+                rows={6}
+                disabled={isProcessing}
+                className="token-textarea"
+              />
+            </div>
           </div>
         </div>
 
         <div className="test-section">
           <button
             onClick={handleTest}
-            disabled={isProcessing || !basePrompt.trim()}
+            disabled={isProcessing || (!prompts.short.trim() && !prompts.long.trim() && !prompts.limit.trim())}
             className="test-button"
           >
             {isProcessing ? 'Тестирование...' : 'Запустить тест'}
@@ -525,7 +340,7 @@ function TokenComparison() {
                       <div className="loading-container">
                         <div className="loading-indicator">
                           <div className="status-text">
-                            {result.phase === 'generating' ? '🔄 Генерация промпта:' : '⏳ Обработка запроса:'}
+                            ⏳ Обработка запроса:
                           </div>
                           <div className="status-message">{result.status || 'Обработка...'}</div>
                           {result.progress !== undefined && (
@@ -594,18 +409,16 @@ function TokenComparison() {
             <h3>Информация о тесте</h3>
             <div className="info-grid">
               <div className="info-card">
-                <h4>Короткий запрос</h4>
-                <p>Введенный промпт используется как есть, без изменений</p>
+                <h4>Короткий промпт</h4>
+                <p>Введите промпт для первого столбца сравнения</p>
               </div>
               <div className="info-card">
-                <h4>Длинный запрос</h4>
-                <p>Промпт наращивается до ~8000 токенов через DeepSeek API</p>
+                <h4>Длинный промпт</h4>
+                <p>Введите промпт для второго столбца сравнения</p>
               </div>
               <div className="info-card">
-                <h4>Запрос превышающий лимит</h4>
-                <p>
-                  Промпт наращивается до ~30000 токенов через DeepSeek API
-                </p>
+                <h4>Лимитный промпт</h4>
+                <p>Введите промпт для третьего столбца сравнения</p>
               </div>
             </div>
           </div>
