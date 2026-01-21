@@ -38,47 +38,54 @@ function TokenComparison() {
     return Math.max(byChars, byWords, 1)
   }
 
-  const buildPromptToTargetTokens = (
+  /**
+   * Просит DeepSeek развернуть или сжать промпт до нужного объема
+   */
+  const expandPromptViaAPI = async (
     input: string,
     targetTokens: number,
-    maxTokens: number
-  ): { prompt: string; estimatedTokens: number } => {
+    variantType: 'short' | 'long' | 'limit'
+  ): Promise<{ prompt: string; estimatedTokens: number }> => {
     const seed = input.trim()
     if (!seed) return { prompt: '', estimatedTokens: 0 }
 
-    // Если нужно "сжать" — просто усечём до целевого размера по символам (быстро и предсказуемо)
-    const currentTokens = estimateTokens(seed)
-    if (currentTokens >= targetTokens) {
-      // подберём длину по символам, затем чуть подгоним
-      const ratio = targetTokens / currentTokens
-      const approxChars = Math.max(40, Math.floor(seed.length * ratio))
-      let candidate = seed.slice(0, approxChars)
-      // подгоним вверх/вниз в пределах небольшого окна
-      for (let i = 0; i < 200 && estimateTokens(candidate) > targetTokens; i++) {
-        candidate = candidate.slice(0, Math.max(1, candidate.length - 10))
+    let instruction = ''
+    if (variantType === 'short') {
+      instruction = `Сократи следующий промпт до примерно ${targetTokens} токенов, сохранив основную суть и ключевые идеи:\n\n${seed}`
+    } else if (variantType === 'long') {
+      instruction = `Разверни следующий промпт до примерно ${targetTokens} токенов, добавив детали, примеры и пояснения, но сохранив основную тему:\n\n${seed}`
+    } else {
+      // limit
+      instruction = `Максимально разверни следующий промпт до примерно ${targetTokens} токенов (но не превышай этот лимит), добавив максимальное количество деталей, примеров, пояснений и контекста, сохранив основную тему:\n\n${seed}`
+    }
+
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt: instruction,
+          max_tokens: Math.min(targetTokens * 2, 32000), // Ограничиваем ответ
+        }),
+      })
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ detail: 'Unknown error' }))
+        throw new Error(errorData.detail || `HTTP error! status: ${res.status}`)
       }
-      return { prompt: candidate, estimatedTokens: estimateTokens(candidate) }
-    }
 
-    // Если нужно "развернуть" — повторяем исходный промпт с разделителями, пока не достигнем
-    const separator = '\n\n---\n\n'
-    let out = seed
-    while (estimateTokens(out) < targetTokens) {
-      out += `${separator}${seed}`
-      // safety: если вдруг улетели в память
-      if (out.length > 2_000_000) break
-    }
+      const data = await res.json()
+      const expandedPrompt = data.response || seed
+      const estimated = estimateTokens(expandedPrompt)
 
-    // Ограничиваем верхнюю границу
-    while (estimateTokens(out) > maxTokens) {
-      out = out.slice(0, Math.max(1, out.length - 1000))
+      return { prompt: expandedPrompt, estimatedTokens: estimated }
+    } catch (error) {
+      // В случае ошибки возвращаем исходный промпт
+      console.error('Error expanding prompt:', error)
+      return { prompt: seed, estimatedTokens: estimateTokens(seed) }
     }
-    // И чуть подгоним вниз, чтобы точно не превышать maxTokens
-    for (let i = 0; i < 400 && estimateTokens(out) > maxTokens; i++) {
-      out = out.slice(0, Math.max(1, out.length - 50))
-    }
-
-    return { prompt: out, estimatedTokens: estimateTokens(out) }
   }
 
   const callAPI = async (
@@ -168,55 +175,119 @@ function TokenComparison() {
     // Проверяем, не был ли отправлен новый запрос
     if (currentRequestIdRef.current !== requestId) return
 
-    // Генерируем варианты промптов только при нажатии кнопки
-    const shortTarget = 200
-    const longTarget = 8000
-    const limitTarget = 34000
-
-    const short = buildPromptToTargetTokens(basePrompt, shortTarget, shortTarget)
-    const long = buildPromptToTargetTokens(basePrompt, longTarget, longTarget)
-    const limit = buildPromptToTargetTokens(basePrompt, limitTarget, limitTarget) // <= 34000
-
-    // Создаем результаты
+    // Создаем результаты с пустыми промптами (будут заполнены после генерации)
     const initialResults: TokenResult[] = [
       {
         id: 'short',
         type: 'short',
-        prompt: short.prompt,
+        prompt: '',
         response: '',
         usage: null,
         isLoading: true,
-        promptLength: short.prompt.length,
-        estimatedPromptTokens: short.estimatedTokens,
+        promptLength: 0,
+        estimatedPromptTokens: 0,
       },
       {
         id: 'long',
         type: 'long',
-        prompt: long.prompt,
+        prompt: '',
         response: '',
         usage: null,
         isLoading: true,
-        promptLength: long.prompt.length,
-        estimatedPromptTokens: long.estimatedTokens,
+        promptLength: 0,
+        estimatedPromptTokens: 0,
       },
       {
         id: 'limit',
         type: 'limit',
-        prompt: limit.prompt,
+        prompt: '',
         response: '',
         usage: null,
         isLoading: true,
-        promptLength: limit.prompt.length,
-        estimatedPromptTokens: limit.estimatedTokens,
+        promptLength: 0,
+        estimatedPromptTokens: 0,
       },
     ]
 
     setResults(initialResults)
 
+    // Генерируем варианты промптов через DeepSeek API
+    const shortTarget = 200
+    const longTarget = 8000
+    const limitTarget = 34000
+
+    // Обновляем состояние для отображения процесса генерации
+    setResults((prev) =>
+      prev.map((r) =>
+        r.id === 'short' || r.id === 'long' || r.id === 'limit'
+          ? { ...r, isLoading: true, error: 'Генерация варианта промпта...' }
+          : r
+      )
+    )
+
+    // Генерируем варианты последовательно
+    const short = await expandPromptViaAPI(basePrompt, shortTarget, 'short')
+    if (currentRequestIdRef.current !== requestId) return
+
+    setResults((prev) =>
+      prev.map((r) =>
+        r.id === 'short'
+          ? {
+              ...r,
+              prompt: short.prompt,
+              promptLength: short.prompt.length,
+              estimatedPromptTokens: short.estimatedTokens,
+              error: undefined,
+            }
+          : r
+      )
+    )
+
+    const long = await expandPromptViaAPI(basePrompt, longTarget, 'long')
+    if (currentRequestIdRef.current !== requestId) return
+
+    setResults((prev) =>
+      prev.map((r) =>
+        r.id === 'long'
+          ? {
+              ...r,
+              prompt: long.prompt,
+              promptLength: long.prompt.length,
+              estimatedPromptTokens: long.estimatedTokens,
+              error: undefined,
+            }
+          : r
+      )
+    )
+
+    const limit = await expandPromptViaAPI(basePrompt, limitTarget, 'limit')
+    if (currentRequestIdRef.current !== requestId) return
+
+    setResults((prev) =>
+      prev.map((r) =>
+        r.id === 'limit'
+          ? {
+              ...r,
+              prompt: limit.prompt,
+              promptLength: limit.prompt.length,
+              estimatedPromptTokens: limit.estimatedTokens,
+              error: undefined,
+            }
+          : r
+      )
+    )
+
     // Обрабатываем каждый запрос последовательно (чтобы не перегружать API)
-    for (const result of initialResults) {
+    // Используем сгенерированные промпты
+    const promptsToTest = [
+      { id: 'short', prompt: short.prompt },
+      { id: 'long', prompt: long.prompt },
+      { id: 'limit', prompt: limit.prompt },
+    ]
+
+    for (const { id, prompt } of promptsToTest) {
       if (currentRequestIdRef.current !== requestId) break
-      await callAPI(result.id, result.prompt, requestId)
+      await callAPI(id, prompt, requestId)
       // Небольшая задержка между запросами
       await new Promise((resolve) => setTimeout(resolve, 500))
     }
