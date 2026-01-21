@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import './TokenComparison.css'
 
@@ -17,50 +17,85 @@ interface TokenResult {
   isLoading: boolean
   error?: string
   promptLength: number
+  estimatedPromptTokens: number
 }
 
 function TokenComparison() {
+  const [basePrompt, setBasePrompt] = useState('')
   const [results, setResults] = useState<TokenResult[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
   const currentRequestIdRef = useRef<string | null>(null)
 
-  // Генерация тестовых промптов
-  const generateShortPrompt = (): string => {
-    return 'Привет! Как дела?'
+  /**
+   * Оценка количества токенов (приблизительно).
+   * Важно: это НЕ точный токенайзер DeepSeek, но хорошо подходит для генерации размеров.
+   */
+  const estimateTokens = (text: string): number => {
+    // грубо: 1 токен ~ 4 символа для латиницы; для кириллицы/пунктуации чуть иначе
+    // чтобы не усложнять, используем два сигнала и берем максимум:
+    const byChars = Math.ceil(text.length / 4)
+    const byWords = Math.ceil(text.trim().split(/\s+/).filter(Boolean).length * 1.3)
+    return Math.max(byChars, byWords, 1)
   }
 
-  const generateLongPrompt = (): string => {
-    // Создаем длинный промпт (~5000-10000 токенов)
-    const baseText = `
-Опиши подробно процесс разработки веб-приложения с использованием React и TypeScript. 
-Включи информацию о настройке проекта, структуре компонентов, управлении состоянием, 
-маршрутизации, работе с API, обработке ошибок, тестировании и деплое. 
-Расскажи о лучших практиках, паттернах проектирования, оптимизации производительности, 
-доступности и безопасности. Добавь примеры кода, объяснения архитектурных решений 
-и рекомендации по масштабированию приложения.
-`.trim()
-    
-    // Повторяем текст много раз для создания длинного промпта
-    return baseText.repeat(200) // ~10000 токенов
+  const buildPromptToTargetTokens = (
+    input: string,
+    targetTokens: number,
+    maxTokens: number
+  ): { prompt: string; estimatedTokens: number } => {
+    const seed = input.trim()
+    if (!seed) return { prompt: '', estimatedTokens: 0 }
+
+    // Если нужно "сжать" — просто усечём до целевого размера по символам (быстро и предсказуемо)
+    const currentTokens = estimateTokens(seed)
+    if (currentTokens >= targetTokens) {
+      // подберём длину по символам, затем чуть подгоним
+      const ratio = targetTokens / currentTokens
+      const approxChars = Math.max(40, Math.floor(seed.length * ratio))
+      let candidate = seed.slice(0, approxChars)
+      // подгоним вверх/вниз в пределах небольшого окна
+      for (let i = 0; i < 200 && estimateTokens(candidate) > targetTokens; i++) {
+        candidate = candidate.slice(0, Math.max(1, candidate.length - 10))
+      }
+      return { prompt: candidate, estimatedTokens: estimateTokens(candidate) }
+    }
+
+    // Если нужно "развернуть" — повторяем исходный промпт с разделителями, пока не достигнем
+    const separator = '\n\n---\n\n'
+    let out = seed
+    while (estimateTokens(out) < targetTokens) {
+      out += `${separator}${seed}`
+      // safety: если вдруг улетели в память
+      if (out.length > 2_000_000) break
+    }
+
+    // Ограничиваем верхнюю границу
+    while (estimateTokens(out) > maxTokens) {
+      out = out.slice(0, Math.max(1, out.length - 1000))
+    }
+    // И чуть подгоним вниз, чтобы точно не превышать maxTokens
+    for (let i = 0; i < 400 && estimateTokens(out) > maxTokens; i++) {
+      out = out.slice(0, Math.max(1, out.length - 50))
+    }
+
+    return { prompt: out, estimatedTokens: estimateTokens(out) }
   }
 
-  const generateLimitExceedingPrompt = (): string => {
-    // Создаем промпт, превышающий лимит модели (~35000+ токенов)
-    // DeepSeek Chat имеет контекстное окно 32k токенов
-    const baseText = `
-Это очень длинный текст, который будет повторяться много раз для создания промпта, 
-превышающего лимит контекстного окна модели. Модель DeepSeek Chat имеет ограничение 
-в 32,000 токенов для контекста. Этот промпт специально создан для тестирования 
-поведения API при превышении лимита. Мы повторяем этот текст множество раз, 
-чтобы достичь размера, превышающего допустимый лимит модели. Каждое повторение 
-добавляет дополнительные токены к общему размеру промпта, постепенно приближаясь 
-к границе контекстного окна и затем превышая её.
-`.trim()
-    
-    // Повторяем текст много раз для создания промпта, превышающего лимит
-    // ~50 токенов на повторение, нужно ~700+ повторений для 35k+ токенов
-    return baseText.repeat(1000) // ~50000+ токенов (превышает лимит 32k)
-  }
+  const variants = useMemo(() => {
+    const shortTarget = 200
+    const longTarget = 8000
+    const limitTarget = 34000
+
+    const short = buildPromptToTargetTokens(basePrompt, shortTarget, shortTarget)
+    const long = buildPromptToTargetTokens(basePrompt, longTarget, longTarget)
+    const limit = buildPromptToTargetTokens(basePrompt, limitTarget, limitTarget) // <= 34000
+
+    return {
+      short,
+      long,
+      limit,
+    }
+  }, [basePrompt])
 
   const callAPI = async (
     resultId: string,
@@ -134,6 +169,7 @@ function TokenComparison() {
 
   const handleTest = async () => {
     if (isProcessing) return
+    if (!basePrompt.trim()) return
 
     // Генерируем уникальный ID для нового запроса
     const requestId = Date.now().toString()
@@ -148,39 +184,37 @@ function TokenComparison() {
     // Проверяем, не был ли отправлен новый запрос
     if (currentRequestIdRef.current !== requestId) return
 
-    // Создаем тестовые промпты
-    const shortPrompt = generateShortPrompt()
-    const longPrompt = generateLongPrompt()
-    const limitPrompt = generateLimitExceedingPrompt()
-
     // Создаем результаты
     const initialResults: TokenResult[] = [
       {
         id: 'short',
         type: 'short',
-        prompt: shortPrompt,
+        prompt: variants.short.prompt,
         response: '',
         usage: null,
         isLoading: true,
-        promptLength: shortPrompt.length,
+        promptLength: variants.short.prompt.length,
+        estimatedPromptTokens: variants.short.estimatedTokens,
       },
       {
         id: 'long',
         type: 'long',
-        prompt: longPrompt,
+        prompt: variants.long.prompt,
         response: '',
         usage: null,
         isLoading: true,
-        promptLength: longPrompt.length,
+        promptLength: variants.long.prompt.length,
+        estimatedPromptTokens: variants.long.estimatedTokens,
       },
       {
         id: 'limit',
         type: 'limit',
-        prompt: limitPrompt,
+        prompt: variants.limit.prompt,
         response: '',
         usage: null,
         isLoading: true,
-        promptLength: limitPrompt.length,
+        promptLength: variants.limit.prompt.length,
+        estimatedPromptTokens: variants.limit.estimatedTokens,
       },
     ]
 
@@ -216,11 +250,11 @@ function TokenComparison() {
   const getTypeDescription = (type: string): string => {
     switch (type) {
       case 'short':
-        return 'Простой короткий запрос (~10-50 токенов)'
+        return 'Сжатый вариант (~200 токенов, оценка)'
       case 'long':
-        return 'Длинный запрос (~5000-10000 токенов)'
+        return 'Развернутый вариант (~8000 токенов, оценка)'
       case 'limit':
-        return 'Запрос, превышающий лимит контекстного окна модели (~35000+ токенов)'
+        return 'Почти лимитный вариант (≤ 34000 токенов, оценка)'
       default:
         return ''
     }
@@ -235,15 +269,29 @@ function TokenComparison() {
         <div className="token-header">
           <h1>Подсчёт и сравнение токенов</h1>
           <p className="token-description">
-            Тестирование подсчёта токенов для запросов разной длины: короткий запрос, 
-            длинный запрос и запрос, превышающий лимит модели DeepSeek Chat (32k токенов).
+            Введите свой промпт — страница автоматически сделает 3 версии (сжатую, развернутую и почти лимитную),
+            затем отправит их в DeepSeek и покажет usage токенов на запрос/ответ.
           </p>
+        </div>
+
+        <div className="token-input-section">
+          <textarea
+            value={basePrompt}
+            onChange={(e) => setBasePrompt(e.target.value)}
+            placeholder="Введите ваш промпт..."
+            rows={6}
+            disabled={isProcessing}
+            className="token-textarea"
+          />
+          <div className="token-input-hint">
+            Оценка токенов (примерно): short ~200, long ~8000, limit ≤ 34000.
+          </div>
         </div>
 
         <div className="test-section">
           <button
             onClick={handleTest}
-            disabled={isProcessing}
+            disabled={isProcessing || !basePrompt.trim()}
             className="test-button"
           >
             {isProcessing ? 'Тестирование...' : 'Запустить тест'}
@@ -272,7 +320,8 @@ function TokenComparison() {
                           : result.prompt}
                       </div>
                       <div className="prompt-stats">
-                        Длина промпта: {result.promptLength.toLocaleString()} символов
+                        Длина промпта: {result.promptLength.toLocaleString()} символов ·
+                        Оценка: {result.estimatedPromptTokens.toLocaleString()} токенов
                       </div>
                     </div>
 
