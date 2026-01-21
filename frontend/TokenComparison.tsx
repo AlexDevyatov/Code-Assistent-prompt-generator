@@ -19,12 +19,16 @@ interface TokenResult {
   status?: string
   promptLength: number
   estimatedPromptTokens: number
+  progress?: number
+  phase?: 'generating' | 'processing' | 'completed'
 }
 
 function TokenComparison() {
   const [basePrompt, setBasePrompt] = useState('')
   const [results, setResults] = useState<TokenResult[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
+  const [overallProgress, setOverallProgress] = useState(0)
+  const [overallStatus, setOverallStatus] = useState('')
   const currentRequestIdRef = useRef<string | null>(null)
 
   /**
@@ -69,7 +73,7 @@ function TokenComparison() {
     targetTokens: number,
     maxTokens: number,
     variantType: 'short' | 'long' | 'limit',
-    onStatus?: (s: string) => void
+    onStatus?: (s: string, progress?: number) => void
   ): Promise<{ prompt: string; estimatedTokens: number }> => {
     const seed = input.trim()
     if (!seed) return { prompt: '', estimatedTokens: 0 }
@@ -84,21 +88,15 @@ function TokenComparison() {
 
     try {
       if (variantType === 'short') {
-        onStatus?.('Сжимаю промпт через DeepSeek…')
-        const instruction =
-          `Сократи следующий промпт до ~${targetTokens} токенов. ` +
-          `Сохрани смысл и ключевые детали. Верни ТОЛЬКО итоговый промпт без пояснений.\n\n` +
-          seed
-        const out = await requestDeepSeekText(instruction, Math.min(1200, targetTokens * 2))
-        const trimmed = trimToMax(out || seed)
-        return { prompt: trimmed, estimatedTokens: estimateTokens(trimmed) }
+        onStatus?.('Используется исходный промпт', 100)
+        return { prompt: seed, estimatedTokens: estimateTokens(seed) }
       }
 
       // long / limit: итеративно наращиваем, пока не достигнем targetTokens
       const perCallMaxTokens = 2000 // безопасный размер чанка
       const maxIters = variantType === 'long' ? 8 : 24
 
-      onStatus?.('Готовлю базовую развернутую версию…')
+      onStatus?.('Готовлю базовую развернутую версию…', 5)
       const firstInstruction =
         `Разверни следующий промпт значительно подробнее, добавив структуры, критерии, детали, примеры и ограничения. ` +
         `Верни ТОЛЬКО итоговый промпт без пояснений.\n\n` +
@@ -108,11 +106,13 @@ function TokenComparison() {
       out = trimToMax(out)
 
       for (let i = 0; i < maxIters && estimateTokens(out) < targetTokens; i++) {
+        const currentProgress = Math.min(
+          95,
+          5 + Math.round((estimateTokens(out) / targetTokens) * 90)
+        )
         onStatus?.(
-          `Наращиваю промпт… ${Math.min(
-            100,
-            Math.round((estimateTokens(out) / targetTokens) * 100)
-          )}%`
+          `Наращиваю промпт… ${Math.round((estimateTokens(out) / targetTokens) * 100)}%`,
+          currentProgress
         )
 
         const continueInstruction =
@@ -154,7 +154,7 @@ function TokenComparison() {
       setResults((prev) =>
         prev.map((r) =>
           r.id === resultId
-            ? { ...r, isLoading: true, error: undefined }
+            ? { ...r, isLoading: true, error: undefined, status: 'Отправляю запрос в DeepSeek...', phase: 'processing', progress: 10 }
             : r
         )
       )
@@ -169,6 +169,16 @@ function TokenComparison() {
           max_tokens: 1000, // Ограничиваем ответ для экономии токенов
         }),
       })
+
+      // Обновляем статус во время обработки ответа
+      if (currentRequestIdRef.current !== requestId) return
+      setResults((prev) =>
+        prev.map((r) =>
+          r.id === resultId
+            ? { ...r, status: 'Получаю ответ от DeepSeek...', progress: 70 }
+            : r
+        )
+      )
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({ detail: 'Unknown error' }))
@@ -188,6 +198,9 @@ function TokenComparison() {
                 response: data.response || '',
                 usage: data.usage || null,
                 isLoading: false,
+                status: 'Готово',
+                phase: 'completed',
+                progress: 100,
               }
             : r
         )
@@ -203,6 +216,8 @@ function TokenComparison() {
                 ...r,
                 isLoading: false,
                 error: error instanceof Error ? error.message : 'Произошла ошибка',
+                phase: 'completed',
+                progress: 0,
               }
             : r
         )
@@ -220,6 +235,8 @@ function TokenComparison() {
 
     setIsProcessing(true)
     setResults([])
+    setOverallProgress(0)
+    setOverallStatus('Инициализация...')
 
     // Небольшая задержка для гарантии очистки UI
     await new Promise((resolve) => setTimeout(resolve, 50))
@@ -238,6 +255,8 @@ function TokenComparison() {
         isLoading: true,
         promptLength: 0,
         estimatedPromptTokens: 0,
+        phase: 'generating',
+        progress: 0,
       },
       {
         id: 'long',
@@ -248,6 +267,8 @@ function TokenComparison() {
         isLoading: true,
         promptLength: 0,
         estimatedPromptTokens: 0,
+        phase: 'generating',
+        progress: 0,
       },
       {
         id: 'limit',
@@ -258,6 +279,8 @@ function TokenComparison() {
         isLoading: true,
         promptLength: 0,
         estimatedPromptTokens: 0,
+        phase: 'generating',
+        progress: 0,
       },
     ]
 
@@ -268,6 +291,9 @@ function TokenComparison() {
     const limitTarget = 30000
 
     // Для короткого запроса используем введенный промпт как есть
+    setOverallStatus('Подготовка промптов...')
+    setOverallProgress(5)
+    
     const short = {
       prompt: basePrompt.trim(),
       estimatedTokens: estimateTokens(basePrompt.trim())
@@ -281,21 +307,26 @@ function TokenComparison() {
               prompt: short.prompt,
               promptLength: short.prompt.length,
               estimatedPromptTokens: short.estimatedTokens,
-              status: undefined,
+              status: 'Промпт готов',
+              phase: 'processing',
+              progress: 100,
             }
           : r
       )
     )
     if (currentRequestIdRef.current !== requestId) return
 
+    setOverallStatus('Генерация длинного промпта...')
+    setOverallProgress(15)
+
     const long = await generateVariantViaDeepSeek(
       basePrompt,
       longTarget,
       longTarget,
       'long',
-      (s) =>
+      (s, progress) =>
         setResults((prev) =>
-          prev.map((r) => (r.id === 'long' ? { ...r, status: s } : r))
+          prev.map((r) => (r.id === 'long' ? { ...r, status: s, progress, phase: 'generating' } : r))
         )
     )
     if (currentRequestIdRef.current !== requestId) return
@@ -308,20 +339,26 @@ function TokenComparison() {
               prompt: long.prompt,
               promptLength: long.prompt.length,
               estimatedPromptTokens: long.estimatedTokens,
-              status: undefined,
+              status: 'Промпт готов',
+              phase: 'processing',
+              progress: 100,
             }
           : r
       )
     )
+    if (currentRequestIdRef.current !== requestId) return
+
+    setOverallStatus('Генерация лимитного промпта...')
+    setOverallProgress(40)
 
     const limit = await generateVariantViaDeepSeek(
       basePrompt,
       limitTarget,
       limitTarget,
       'limit',
-      (s) =>
+      (s, progress) =>
         setResults((prev) =>
-          prev.map((r) => (r.id === 'limit' ? { ...r, status: s } : r))
+          prev.map((r) => (r.id === 'limit' ? { ...r, status: s, progress, phase: 'generating' } : r))
         )
     )
     if (currentRequestIdRef.current !== requestId) return
@@ -334,11 +371,17 @@ function TokenComparison() {
               prompt: limit.prompt,
               promptLength: limit.prompt.length,
               estimatedPromptTokens: limit.estimatedTokens,
-              status: undefined,
+              status: 'Промпт готов',
+              phase: 'processing',
+              progress: 100,
             }
           : r
       )
     )
+    if (currentRequestIdRef.current !== requestId) return
+
+    setOverallStatus('Отправка запросов в DeepSeek...')
+    setOverallProgress(65)
 
     // Обрабатываем каждый запрос последовательно (чтобы не перегружать API)
     // Используем сгенерированные промпты
@@ -348,8 +391,13 @@ function TokenComparison() {
       { id: 'limit', prompt: limit.prompt },
     ]
 
-    for (const { id, prompt } of promptsToTest) {
+    for (let i = 0; i < promptsToTest.length; i++) {
       if (currentRequestIdRef.current !== requestId) break
+      const { id, prompt } = promptsToTest[i]
+      const progressBase = 65 + (i * 30) / promptsToTest.length
+      setOverallProgress(Math.round(progressBase))
+      setOverallStatus(`Обработка ${getTypeLabel(id === 'short' ? 'short' : id === 'long' ? 'long' : 'limit')}...`)
+      
       await callAPI(id, prompt, requestId)
       // Небольшая задержка между запросами
       await new Promise((resolve) => setTimeout(resolve, 500))
@@ -357,7 +405,14 @@ function TokenComparison() {
 
     // Проверяем актуальность запроса перед завершением
     if (currentRequestIdRef.current === requestId) {
+      setOverallProgress(100)
+      setOverallStatus('Готово!')
       setIsProcessing(false)
+      // Очищаем статус через 2 секунды
+      setTimeout(() => {
+        setOverallStatus('')
+        setOverallProgress(0)
+      }, 2000)
     }
   }
 
@@ -423,6 +478,20 @@ function TokenComparison() {
           >
             {isProcessing ? 'Тестирование...' : 'Запустить тест'}
           </button>
+          {isProcessing && overallStatus && (
+            <div className="overall-progress-section">
+              <div className="overall-status">{overallStatus}</div>
+              <div className="progress-container">
+                <div className="progress-bar">
+                  <div 
+                    className="progress-fill" 
+                    style={{ width: `${overallProgress}%` }}
+                  ></div>
+                </div>
+                <div className="progress-text">{overallProgress}%</div>
+              </div>
+            </div>
+          )}
         </div>
 
         {results.length > 0 && (
@@ -455,7 +524,21 @@ function TokenComparison() {
                     {result.isLoading ? (
                       <div className="loading-container">
                         <div className="loading-indicator">
-                          {result.status || 'Обработка...'}
+                          <div className="status-text">
+                            {result.phase === 'generating' ? '🔄 Генерация промпта:' : '⏳ Обработка запроса:'}
+                          </div>
+                          <div className="status-message">{result.status || 'Обработка...'}</div>
+                          {result.progress !== undefined && (
+                            <div className="progress-container">
+                              <div className="progress-bar">
+                                <div 
+                                  className="progress-fill" 
+                                  style={{ width: `${result.progress}%` }}
+                                ></div>
+                              </div>
+                              <div className="progress-text">{result.progress}%</div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     ) : result.error ? (
