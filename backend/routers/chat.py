@@ -107,6 +107,15 @@ async def chat(request: ChatRequest):
         # Извлекаем ответ из структуры DeepSeek API
         if "choices" in data and len(data["choices"]) > 0:
             result = {"response": data["choices"][0]["message"]["content"]}
+            
+            # Добавляем информацию о токенах, если она есть
+            if "usage" in data:
+                result["usage"] = {
+                    "prompt_tokens": data["usage"].get("prompt_tokens", 0),
+                    "completion_tokens": data["usage"].get("completion_tokens", 0),
+                    "total_tokens": data["usage"].get("total_tokens", 0)
+                }
+            
             logger.info("Successfully received response from DeepSeek API")
             return result
         else:

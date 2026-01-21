@@ -5,6 +5,7 @@ import ReasoningComparison from './ReasoningComparison'
 import SystemPromptTest from './SystemPromptTest'
 import TemperatureComparison from './TemperatureComparison'
 import ModelComparison from './ModelComparison'
+import TokenComparison from './TokenComparison'
 
 function App() {
   return (
@@ -16,6 +17,7 @@ function App() {
         <Route path="/system-prompt" element={<SystemPromptTest />} />
         <Route path="/temperature" element={<TemperatureComparison />} />
         <Route path="/model-comparison" element={<ModelComparison />} />
+        <Route path="/token-comparison" element={<TokenComparison />} />
       </Routes>
     </BrowserRouter>
   )

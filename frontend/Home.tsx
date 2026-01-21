@@ -38,6 +38,12 @@ function Home() {
               <p>Сравнение ответов от DeepSeek и Llama 3.2-1B на один и тот же запрос</p>
             </div>
           </Link>
+          <Link to="/token-comparison" className="home-link">
+            <div className="home-link-card">
+              <h2>Подсчёт токенов</h2>
+              <p>Подсчёт токенов для запросов разной длины: короткий, длинный и превышающий лимит модели</p>
+            </div>
+          </Link>
         </div>
       </div>
     </div>
