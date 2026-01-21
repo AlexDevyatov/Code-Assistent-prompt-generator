@@ -95,44 +95,60 @@ function TokenComparison() {
       }
 
       // long / limit: итеративно наращиваем, пока не достигнем targetTokens
-      const perCallMaxTokens = 2000 // безопасный размер чанка
-      const maxIters = variantType === 'long' ? 8 : 24
+      const perCallMaxTokens = variantType === 'limit' ? 4000 : 3000 // больше токенов для limit
+      const maxIters = variantType === 'long' ? 5 : 10
 
       onStatus?.('Готовлю базовую развернутую версию…')
       const firstInstruction =
-        `Разверни следующий промпт значительно подробнее, добавив структуры, критерии, детали, примеры и ограничения. ` +
-        `Верни ТОЛЬКО итоговый промпт без пояснений.\n\n` +
+        `Разверни следующий промпт значительно подробнее, добавив детали, примеры, структуру, критерии и пояснения. ` +
+        `Сохрани основную тему и смысл. Верни ТОЛЬКО итоговый развернутый промпт без дополнительных пояснений.\n\n` +
         seed
       let out = await requestDeepSeekText(firstInstruction, perCallMaxTokens)
-      if (!out) out = seed
+      if (!out || out.trim().length < seed.length) out = seed
       out = trimToMax(out)
+      
+      let prevTokens = estimateTokens(out)
+      let noProgressCount = 0
 
       for (let i = 0; i < maxIters && estimateTokens(out) < targetTokens; i++) {
-        onStatus?.(
-          `Наращиваю промпт… ${Math.min(
-            100,
-            Math.round((estimateTokens(out) / targetTokens) * 100)
-          )}%`
-        )
+        const currentTokens = estimateTokens(out)
+        const progress = Math.min(100, Math.round((currentTokens / targetTokens) * 100))
+        onStatus?.(`Наращиваю промпт… ${progress}% (${currentTokens.toLocaleString()}/${targetTokens.toLocaleString()} токенов)`)
 
+        // Просим DeepSeek расширить промпт дальше, указывая текущий размер и целевой
         const continueInstruction =
-          `Продолжи РАСШИРЯТЬ и УТОЧНЯТЬ промпт ниже, добавляя больше деталей, примеров, ` +
-          `edge-cases, критериев качества, входных/выходных форматов. ` +
-          `Верни ТОЛЬКО ДОПОЛНЕНИЕ, которое нужно ПРИБАВИТЬ в конец (без вступления/заголовков).\n\n` +
-          out
+          `Текущий промпт содержит примерно ${currentTokens} токенов. ` +
+          `Нужно расширить его до примерно ${targetTokens} токенов. ` +
+          `Добавь больше деталей, примеров, edge-cases, критериев качества, форматов данных, ограничений и пояснений. ` +
+          `Верни ПОЛНЫЙ расширенный промпт (включая всё предыдущее содержимое + новые дополнения), ` +
+          `а не только дополнения. Цель: примерно ${targetTokens} токенов.\n\n` +
+          `Текущий промпт:\n${out}`
 
-        const addition = await requestDeepSeekText(continueInstruction, perCallMaxTokens)
-        if (!addition) break
-        out = trimToMax(`${out}\n\n${addition}`)
-
-        // гарантируем, что long не станет меньше short (и вообще растёт)
-        if (estimateTokens(out) <= estimateTokens(seed) && i > 0) break
+        const expanded = await requestDeepSeekText(continueInstruction, perCallMaxTokens)
+        if (!expanded || expanded.trim().length <= out.length) {
+          noProgressCount++
+          if (noProgressCount >= 2) break // если 2 раза подряд нет прогресса - останавливаемся
+          continue
+        }
+        
+        const newTokens = estimateTokens(expanded)
+        if (newTokens <= prevTokens) {
+          noProgressCount++
+          if (noProgressCount >= 2) break
+          continue
+        }
+        
+        noProgressCount = 0
+        out = trimToMax(expanded)
+        prevTokens = newTokens
+        
+        // Если достигли цели или близки к ней - останавливаемся
+        if (estimateTokens(out) >= targetTokens * 0.9) break
       }
 
       // финальная подгонка: не превышаем maxTokens (особенно важно для limit=34000)
       out = trimToMax(out)
 
-      // если по какой-то причине получилось сильно меньше target — всё равно возвращаем то, что есть
       return { prompt: out, estimatedTokens: estimateTokens(out) }
     } catch (error) {
       console.error('Error generating variant prompt:', error)
