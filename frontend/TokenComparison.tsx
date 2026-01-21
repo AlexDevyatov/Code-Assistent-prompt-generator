@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import './TokenComparison.css'
 
@@ -80,22 +80,6 @@ function TokenComparison() {
 
     return { prompt: out, estimatedTokens: estimateTokens(out) }
   }
-
-  const variants = useMemo(() => {
-    const shortTarget = 200
-    const longTarget = 8000
-    const limitTarget = 34000
-
-    const short = buildPromptToTargetTokens(basePrompt, shortTarget, shortTarget)
-    const long = buildPromptToTargetTokens(basePrompt, longTarget, longTarget)
-    const limit = buildPromptToTargetTokens(basePrompt, limitTarget, limitTarget) // <= 34000
-
-    return {
-      short,
-      long,
-      limit,
-    }
-  }, [basePrompt])
 
   const callAPI = async (
     resultId: string,
@@ -184,37 +168,46 @@ function TokenComparison() {
     // Проверяем, не был ли отправлен новый запрос
     if (currentRequestIdRef.current !== requestId) return
 
+    // Генерируем варианты промптов только при нажатии кнопки
+    const shortTarget = 200
+    const longTarget = 8000
+    const limitTarget = 34000
+
+    const short = buildPromptToTargetTokens(basePrompt, shortTarget, shortTarget)
+    const long = buildPromptToTargetTokens(basePrompt, longTarget, longTarget)
+    const limit = buildPromptToTargetTokens(basePrompt, limitTarget, limitTarget) // <= 34000
+
     // Создаем результаты
     const initialResults: TokenResult[] = [
       {
         id: 'short',
         type: 'short',
-        prompt: variants.short.prompt,
+        prompt: short.prompt,
         response: '',
         usage: null,
         isLoading: true,
-        promptLength: variants.short.prompt.length,
-        estimatedPromptTokens: variants.short.estimatedTokens,
+        promptLength: short.prompt.length,
+        estimatedPromptTokens: short.estimatedTokens,
       },
       {
         id: 'long',
         type: 'long',
-        prompt: variants.long.prompt,
+        prompt: long.prompt,
         response: '',
         usage: null,
         isLoading: true,
-        promptLength: variants.long.prompt.length,
-        estimatedPromptTokens: variants.long.estimatedTokens,
+        promptLength: long.prompt.length,
+        estimatedPromptTokens: long.estimatedTokens,
       },
       {
         id: 'limit',
         type: 'limit',
-        prompt: variants.limit.prompt,
+        prompt: limit.prompt,
         response: '',
         usage: null,
         isLoading: true,
-        promptLength: variants.limit.prompt.length,
-        estimatedPromptTokens: variants.limit.estimatedTokens,
+        promptLength: limit.prompt.length,
+        estimatedPromptTokens: limit.estimatedTokens,
       },
     ]
 
