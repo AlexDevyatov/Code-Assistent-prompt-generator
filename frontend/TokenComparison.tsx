@@ -95,60 +95,44 @@ function TokenComparison() {
       }
 
       // long / limit: итеративно наращиваем, пока не достигнем targetTokens
-      const perCallMaxTokens = variantType === 'limit' ? 4000 : 3000 // больше токенов для limit
-      const maxIters = variantType === 'long' ? 5 : 10
+      const perCallMaxTokens = 2000 // безопасный размер чанка
+      const maxIters = variantType === 'long' ? 8 : 24
 
       onStatus?.('Готовлю базовую развернутую версию…')
       const firstInstruction =
-        `Разверни следующий промпт значительно подробнее, добавив детали, примеры, структуру, критерии и пояснения. ` +
-        `Сохрани основную тему и смысл. Верни ТОЛЬКО итоговый развернутый промпт без дополнительных пояснений.\n\n` +
+        `Разверни следующий промпт значительно подробнее, добавив структуры, критерии, детали, примеры и ограничения. ` +
+        `Верни ТОЛЬКО итоговый промпт без пояснений.\n\n` +
         seed
       let out = await requestDeepSeekText(firstInstruction, perCallMaxTokens)
-      if (!out || out.trim().length < seed.length) out = seed
+      if (!out) out = seed
       out = trimToMax(out)
-      
-      let prevTokens = estimateTokens(out)
-      let noProgressCount = 0
 
       for (let i = 0; i < maxIters && estimateTokens(out) < targetTokens; i++) {
-        const currentTokens = estimateTokens(out)
-        const progress = Math.min(100, Math.round((currentTokens / targetTokens) * 100))
-        onStatus?.(`Наращиваю промпт… ${progress}% (${currentTokens.toLocaleString()}/${targetTokens.toLocaleString()} токенов)`)
+        onStatus?.(
+          `Наращиваю промпт… ${Math.min(
+            100,
+            Math.round((estimateTokens(out) / targetTokens) * 100)
+          )}%`
+        )
 
-        // Просим DeepSeek расширить промпт дальше, указывая текущий размер и целевой
         const continueInstruction =
-          `Текущий промпт содержит примерно ${currentTokens} токенов. ` +
-          `Нужно расширить его до примерно ${targetTokens} токенов. ` +
-          `Добавь больше деталей, примеров, edge-cases, критериев качества, форматов данных, ограничений и пояснений. ` +
-          `Верни ПОЛНЫЙ расширенный промпт (включая всё предыдущее содержимое + новые дополнения), ` +
-          `а не только дополнения. Цель: примерно ${targetTokens} токенов.\n\n` +
-          `Текущий промпт:\n${out}`
+          `Продолжи РАСШИРЯТЬ и УТОЧНЯТЬ промпт ниже, добавляя больше деталей, примеров, ` +
+          `edge-cases, критериев качества, входных/выходных форматов. ` +
+          `Верни ТОЛЬКО ДОПОЛНЕНИЕ, которое нужно ПРИБАВИТЬ в конец (без вступления/заголовков).\n\n` +
+          out
 
-        const expanded = await requestDeepSeekText(continueInstruction, perCallMaxTokens)
-        if (!expanded || expanded.trim().length <= out.length) {
-          noProgressCount++
-          if (noProgressCount >= 2) break // если 2 раза подряд нет прогресса - останавливаемся
-          continue
-        }
-        
-        const newTokens = estimateTokens(expanded)
-        if (newTokens <= prevTokens) {
-          noProgressCount++
-          if (noProgressCount >= 2) break
-          continue
-        }
-        
-        noProgressCount = 0
-        out = trimToMax(expanded)
-        prevTokens = newTokens
-        
-        // Если достигли цели или близки к ней - останавливаемся
-        if (estimateTokens(out) >= targetTokens * 0.9) break
+        const addition = await requestDeepSeekText(continueInstruction, perCallMaxTokens)
+        if (!addition) break
+        out = trimToMax(`${out}\n\n${addition}`)
+
+        // гарантируем, что long не станет меньше short (и вообще растёт)
+        if (estimateTokens(out) <= estimateTokens(seed) && i > 0) break
       }
 
-      // финальная подгонка: не превышаем maxTokens (особенно важно для limit=34000)
+      // финальная подгонка: не превышаем maxTokens (особенно важно для limit=30000)
       out = trimToMax(out)
 
+      // если по какой-то причине получилось сильно меньше target — всё равно возвращаем то, что есть
       return { prompt: out, estimatedTokens: estimateTokens(out) }
     } catch (error) {
       console.error('Error generating variant prompt:', error)
@@ -280,22 +264,14 @@ function TokenComparison() {
     setResults(initialResults)
 
     // Генерируем варианты промптов через DeepSeek API
-    const shortTarget = 200
     const longTarget = 8000
-    const limitTarget = 34000
+    const limitTarget = 30000
 
-    // Генерируем варианты последовательно
-    const short = await generateVariantViaDeepSeek(
-      basePrompt,
-      shortTarget,
-      shortTarget,
-      'short',
-      (s) =>
-        setResults((prev) =>
-          prev.map((r) => (r.id === 'short' ? { ...r, status: s } : r))
-        )
-    )
-    if (currentRequestIdRef.current !== requestId) return
+    // Для короткого запроса используем введенный промпт как есть
+    const short = {
+      prompt: basePrompt.trim(),
+      estimatedTokens: estimateTokens(basePrompt.trim())
+    }
 
     setResults((prev) =>
       prev.map((r) =>
@@ -310,6 +286,7 @@ function TokenComparison() {
           : r
       )
     )
+    if (currentRequestIdRef.current !== requestId) return
 
     const long = await generateVariantViaDeepSeek(
       basePrompt,
@@ -400,11 +377,11 @@ function TokenComparison() {
   const getTypeDescription = (type: string): string => {
     switch (type) {
       case 'short':
-        return 'Сжатый вариант (~200 токенов, оценка)'
+        return 'Исходный промпт (без изменений)'
       case 'long':
         return 'Развернутый вариант (~8000 токенов, оценка)'
       case 'limit':
-        return 'Почти лимитный вариант (≤ 34000 токенов, оценка)'
+        return 'Почти лимитный вариант (≤ 30000 токенов, оценка)'
       default:
         return ''
     }
@@ -419,7 +396,7 @@ function TokenComparison() {
         <div className="token-header">
           <h1>Подсчёт и сравнение токенов</h1>
           <p className="token-description">
-            Введите свой промпт — страница автоматически сделает 3 версии (сжатую, развернутую и почти лимитную),
+            Введите свой промпт — страница автоматически сделает 3 версии (исходный промпт, развернутый до ~8000 токенов и наращенный до ~30000 токенов),
             затем отправит их в DeepSeek и покажет usage токенов на запрос/ответ.
           </p>
         </div>
@@ -434,7 +411,7 @@ function TokenComparison() {
             className="token-textarea"
           />
           <div className="token-input-hint">
-            Оценка токенов (примерно): short ~200, long ~8000, limit ≤ 34000.
+            Короткий запрос: исходный промпт. Длинный: ~8000 токенов. Лимитный: ≤ 30000 токенов.
           </div>
         </div>
 
@@ -535,17 +512,16 @@ function TokenComparison() {
             <div className="info-grid">
               <div className="info-card">
                 <h4>Короткий запрос</h4>
-                <p>Простой запрос из нескольких слов (~10-50 токенов)</p>
+                <p>Введенный промпт используется как есть, без изменений</p>
               </div>
               <div className="info-card">
                 <h4>Длинный запрос</h4>
-                <p>Запрос с большим количеством текста (~5000-10000 токенов)</p>
+                <p>Промпт наращивается до ~8000 токенов через DeepSeek API</p>
               </div>
               <div className="info-card">
                 <h4>Запрос превышающий лимит</h4>
                 <p>
-                  Запрос, который превышает контекстное окно модели DeepSeek Chat 
-                  (32,000 токенов). Ожидается ошибка от API.
+                  Промпт наращивается до ~30000 токенов через DeepSeek API
                 </p>
               </div>
             </div>
