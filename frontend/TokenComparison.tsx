@@ -16,6 +16,7 @@ interface TokenResult {
   usage: TokenUsage | null
   isLoading: boolean
   error?: string
+  status?: string
   promptLength: number
   estimatedPromptTokens: number
 }
@@ -38,52 +39,103 @@ function TokenComparison() {
     return Math.max(byChars, byWords, 1)
   }
 
+  const requestDeepSeekText = async (prompt: string, maxTokens: number): Promise<string> => {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        prompt,
+        temperature: 0.3,
+        max_tokens: maxTokens,
+      }),
+    })
+
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({ detail: 'Unknown error' }))
+      throw new Error(errorData.detail || `HTTP error! status: ${res.status}`)
+    }
+
+    const data = await res.json()
+    return (data.response || '').trim()
+  }
+
   /**
-   * Просит DeepSeek развернуть или сжать промпт до нужного объема
+   * Генерация варианта промпта ЧЕРЕЗ DeepSeek:
+   * - short: просим сжать до ~targetTokens
+   * - long/limit: наращиваем итеративно (несколькими вызовами), чтобы не получить случайно короткий текст
    */
-  const expandPromptViaAPI = async (
+  const generateVariantViaDeepSeek = async (
     input: string,
     targetTokens: number,
-    variantType: 'short' | 'long' | 'limit'
+    maxTokens: number,
+    variantType: 'short' | 'long' | 'limit',
+    onStatus?: (s: string) => void
   ): Promise<{ prompt: string; estimatedTokens: number }> => {
     const seed = input.trim()
     if (!seed) return { prompt: '', estimatedTokens: 0 }
 
-    let instruction = ''
-    if (variantType === 'short') {
-      instruction = `Сократи следующий промпт до примерно ${targetTokens} токенов, сохранив основную суть и ключевые идеи:\n\n${seed}`
-    } else if (variantType === 'long') {
-      instruction = `Разверни следующий промпт до примерно ${targetTokens} токенов, добавив детали, примеры и пояснения, но сохранив основную тему:\n\n${seed}`
-    } else {
-      // limit
-      instruction = `Максимально разверни следующий промпт до примерно ${targetTokens} токенов (но не превышай этот лимит), добавив максимальное количество деталей, примеров, пояснений и контекста, сохранив основную тему:\n\n${seed}`
+    const trimToMax = (text: string) => {
+      let out = text
+      while (estimateTokens(out) > maxTokens) {
+        out = out.slice(0, Math.max(1, out.length - 1000))
+      }
+      return out
     }
 
     try {
-      const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          prompt: instruction,
-          max_tokens: Math.min(targetTokens * 2, 32000), // Ограничиваем ответ
-        }),
-      })
-
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({ detail: 'Unknown error' }))
-        throw new Error(errorData.detail || `HTTP error! status: ${res.status}`)
+      if (variantType === 'short') {
+        onStatus?.('Сжимаю промпт через DeepSeek…')
+        const instruction =
+          `Сократи следующий промпт до ~${targetTokens} токенов. ` +
+          `Сохрани смысл и ключевые детали. Верни ТОЛЬКО итоговый промпт без пояснений.\n\n` +
+          seed
+        const out = await requestDeepSeekText(instruction, Math.min(1200, targetTokens * 2))
+        const trimmed = trimToMax(out || seed)
+        return { prompt: trimmed, estimatedTokens: estimateTokens(trimmed) }
       }
 
-      const data = await res.json()
-      const expandedPrompt = data.response || seed
-      const estimated = estimateTokens(expandedPrompt)
+      // long / limit: итеративно наращиваем, пока не достигнем targetTokens
+      const perCallMaxTokens = 2000 // безопасный размер чанка
+      const maxIters = variantType === 'long' ? 8 : 24
 
-      return { prompt: expandedPrompt, estimatedTokens: estimated }
+      onStatus?.('Готовлю базовую развернутую версию…')
+      const firstInstruction =
+        `Разверни следующий промпт значительно подробнее, добавив структуры, критерии, детали, примеры и ограничения. ` +
+        `Верни ТОЛЬКО итоговый промпт без пояснений.\n\n` +
+        seed
+      let out = await requestDeepSeekText(firstInstruction, perCallMaxTokens)
+      if (!out) out = seed
+      out = trimToMax(out)
+
+      for (let i = 0; i < maxIters && estimateTokens(out) < targetTokens; i++) {
+        onStatus?.(
+          `Наращиваю промпт… ${Math.min(
+            100,
+            Math.round((estimateTokens(out) / targetTokens) * 100)
+          )}%`
+        )
+
+        const continueInstruction =
+          `Продолжи РАСШИРЯТЬ и УТОЧНЯТЬ промпт ниже, добавляя больше деталей, примеров, ` +
+          `edge-cases, критериев качества, входных/выходных форматов. ` +
+          `Верни ТОЛЬКО ДОПОЛНЕНИЕ, которое нужно ПРИБАВИТЬ в конец (без вступления/заголовков).\n\n` +
+          out
+
+        const addition = await requestDeepSeekText(continueInstruction, perCallMaxTokens)
+        if (!addition) break
+        out = trimToMax(`${out}\n\n${addition}`)
+
+        // гарантируем, что long не станет меньше short (и вообще растёт)
+        if (estimateTokens(out) <= estimateTokens(seed) && i > 0) break
+      }
+
+      // финальная подгонка: не превышаем maxTokens (особенно важно для limit=34000)
+      out = trimToMax(out)
+
+      // если по какой-то причине получилось сильно меньше target — всё равно возвращаем то, что есть
+      return { prompt: out, estimatedTokens: estimateTokens(out) }
     } catch (error) {
-      // В случае ошибки возвращаем исходный промпт
-      console.error('Error expanding prompt:', error)
+      console.error('Error generating variant prompt:', error)
       return { prompt: seed, estimatedTokens: estimateTokens(seed) }
     }
   }
@@ -216,17 +268,17 @@ function TokenComparison() {
     const longTarget = 8000
     const limitTarget = 34000
 
-    // Обновляем состояние для отображения процесса генерации
-    setResults((prev) =>
-      prev.map((r) =>
-        r.id === 'short' || r.id === 'long' || r.id === 'limit'
-          ? { ...r, isLoading: true, error: 'Генерация варианта промпта...' }
-          : r
-      )
-    )
-
     // Генерируем варианты последовательно
-    const short = await expandPromptViaAPI(basePrompt, shortTarget, 'short')
+    const short = await generateVariantViaDeepSeek(
+      basePrompt,
+      shortTarget,
+      shortTarget,
+      'short',
+      (s) =>
+        setResults((prev) =>
+          prev.map((r) => (r.id === 'short' ? { ...r, status: s } : r))
+        )
+    )
     if (currentRequestIdRef.current !== requestId) return
 
     setResults((prev) =>
@@ -237,13 +289,22 @@ function TokenComparison() {
               prompt: short.prompt,
               promptLength: short.prompt.length,
               estimatedPromptTokens: short.estimatedTokens,
-              error: undefined,
+              status: undefined,
             }
           : r
       )
     )
 
-    const long = await expandPromptViaAPI(basePrompt, longTarget, 'long')
+    const long = await generateVariantViaDeepSeek(
+      basePrompt,
+      longTarget,
+      longTarget,
+      'long',
+      (s) =>
+        setResults((prev) =>
+          prev.map((r) => (r.id === 'long' ? { ...r, status: s } : r))
+        )
+    )
     if (currentRequestIdRef.current !== requestId) return
 
     setResults((prev) =>
@@ -254,13 +315,22 @@ function TokenComparison() {
               prompt: long.prompt,
               promptLength: long.prompt.length,
               estimatedPromptTokens: long.estimatedTokens,
-              error: undefined,
+              status: undefined,
             }
           : r
       )
     )
 
-    const limit = await expandPromptViaAPI(basePrompt, limitTarget, 'limit')
+    const limit = await generateVariantViaDeepSeek(
+      basePrompt,
+      limitTarget,
+      limitTarget,
+      'limit',
+      (s) =>
+        setResults((prev) =>
+          prev.map((r) => (r.id === 'limit' ? { ...r, status: s } : r))
+        )
+    )
     if (currentRequestIdRef.current !== requestId) return
 
     setResults((prev) =>
@@ -271,7 +341,7 @@ function TokenComparison() {
               prompt: limit.prompt,
               promptLength: limit.prompt.length,
               estimatedPromptTokens: limit.estimatedTokens,
-              error: undefined,
+              status: undefined,
             }
           : r
       )
@@ -391,7 +461,9 @@ function TokenComparison() {
 
                     {result.isLoading ? (
                       <div className="loading-container">
-                        <div className="loading-indicator">Обработка запроса...</div>
+                        <div className="loading-indicator">
+                          {result.status || 'Обработка...'}
+                        </div>
                       </div>
                     ) : result.error ? (
                       <div className="error-section">
