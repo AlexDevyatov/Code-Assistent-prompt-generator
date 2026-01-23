@@ -6,6 +6,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from backend.services.deepseek_api import call_deepseek_api, stream_deepseek_api
+from backend.config import MAX_TOKENS
 
 logger = logging.getLogger(__name__)
 
@@ -106,15 +107,59 @@ async def chat(request: ChatRequest):
         
         # Извлекаем ответ из структуры DeepSeek API
         if "choices" in data and len(data["choices"]) > 0:
-            result = {"response": data["choices"][0]["message"]["content"]}
+            choice = data["choices"][0]
+            response_content = choice["message"]["content"]
+            finish_reason = choice.get("finish_reason", "stop")
             
-            # Добавляем информацию о токенах, если она есть
-            if "usage" in data:
-                result["usage"] = {
-                    "prompt_tokens": data["usage"].get("prompt_tokens", 0),
-                    "completion_tokens": data["usage"].get("completion_tokens", 0),
-                    "total_tokens": data["usage"].get("total_tokens", 0)
-                }
+            # Инициализируем переменные для токенов
+            initial_usage = data.get("usage", {})
+            prompt_tokens = initial_usage.get("prompt_tokens", 0)
+            completion_tokens = initial_usage.get("completion_tokens", 0)
+            
+            # Если ответ обрезан из-за лимита токенов, запрашиваем продолжение
+            if finish_reason == "length":
+                logger.info("Response was truncated, requesting continuation...")
+                # Добавляем текущий ответ в контекст и запрашиваем продолжение
+                continuation_messages = messages + [
+                    {"role": "assistant", "content": response_content},
+                    {"role": "user", "content": "Продолжи ответ с того места, где остановился. Ответ должен быть полным."}
+                ]
+                
+                # Вычисляем доступные токены для продолжения
+                initial_total = initial_usage.get("total_tokens", 0)
+                max_total_tokens = max_tokens or MAX_TOKENS
+                remaining_tokens = max_total_tokens - initial_total
+                
+                if remaining_tokens > 100:  # Запрашиваем продолжение только если есть достаточно токенов
+                    continuation_max_tokens = min(remaining_tokens, 500)  # Ограничиваем продолжение
+                    continuation_data = await call_deepseek_api(
+                        continuation_messages, 
+                        temperature=temperature, 
+                        max_tokens=continuation_max_tokens
+                    )
+                    
+                    if "choices" in continuation_data and len(continuation_data["choices"]) > 0:
+                        continuation_content = continuation_data["choices"][0]["message"]["content"]
+                        response_content += continuation_content
+                        
+                        # Обновляем информацию о токенах
+                        if "usage" in continuation_data:
+                            continuation_usage = continuation_data["usage"]
+                            # Для продолжения prompt токены будут больше (включают предыдущий ответ)
+                            # Но completion токены - это только новые токены
+                            continuation_completion = continuation_usage.get("completion_tokens", 0)
+                            completion_tokens = completion_tokens + continuation_completion
+                            # Общий prompt остается примерно таким же (может немного увеличиться)
+                            prompt_tokens = continuation_usage.get("prompt_tokens", prompt_tokens)
+            
+            result = {"response": response_content}
+            
+            # Добавляем информацию о токенах
+            result["usage"] = {
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "total_tokens": prompt_tokens + completion_tokens
+            }
             
             logger.info("Successfully received response from DeepSeek API")
             return result
