@@ -17,6 +17,9 @@ interface CompressionInfo {
   original_count: number
   compressed_count: number
   summary?: string
+  tokens_before_compression?: number
+  tokens_after_compression?: number
+  tokens_saved?: number
 }
 
 interface Usage {
@@ -31,6 +34,9 @@ interface ChatResponse {
   original_message_count?: number
   compressed_message_count?: number
   summary?: string
+  tokens_before_compression?: number
+  tokens_after_compression?: number
+  tokens_saved?: number
   usage?: Usage
 }
 
@@ -39,7 +45,7 @@ function CompressionTest() {
     {
       id: 'welcome',
       role: 'assistant',
-      content: 'Привет! Это тест сжатия истории диалога. Каждые 10 сообщений история будет автоматически сжиматься через суммаризацию. Начните диалог!',
+      content: 'Привет! Это тест сжатия истории диалога. Каждые 5 сообщений история будет автоматически сжиматься через суммаризацию. Начните диалог!',
     },
   ])
   const [input, setInput] = useState('')
@@ -175,7 +181,10 @@ function CompressionTest() {
           compressed: true,
           original_count: data.original_message_count || 0,
           compressed_count: data.compressed_message_count || 0,
-          summary: data.summary
+          summary: data.summary,
+          tokens_before_compression: data.tokens_before_compression,
+          tokens_after_compression: data.tokens_after_compression,
+          tokens_saved: data.tokens_saved
         })
 
         // Создаем summary сообщение
@@ -273,7 +282,7 @@ function CompressionTest() {
       {
         id: 'welcome',
         role: 'assistant',
-        content: 'Привет! Это тест сжатия истории диалога. Каждые 10 сообщений история будет автоматически сжиматься через суммаризацию. Начните диалог!',
+        content: 'Привет! Это тест сжатия истории диалога. Каждые 5 сообщений история будет автоматически сжиматься через суммаризацию. Начните диалог!',
       },
     ])
     setCompressionInfo(null)
@@ -344,6 +353,25 @@ function CompressionTest() {
               <strong>Суммаризация</strong>
               <span className="compression-count">{compressionInfo.original_count} сообщений сжато</span>
             </div>
+            {compressionInfo.tokens_before_compression !== undefined && 
+             compressionInfo.tokens_after_compression !== undefined && (
+              <div className="compression-tokens-comparison">
+                <div className="tokens-comparison-item">
+                  <span className="tokens-label">Токенов до:</span>
+                  <span className="tokens-value">{compressionInfo.tokens_before_compression.toLocaleString()}</span>
+                </div>
+                <div className="tokens-comparison-item">
+                  <span className="tokens-label">Токенов после:</span>
+                  <span className="tokens-value tokens-after">{compressionInfo.tokens_after_compression.toLocaleString()}</span>
+                </div>
+                {compressionInfo.tokens_saved !== undefined && compressionInfo.tokens_saved > 0 && (
+                  <div className="tokens-comparison-item tokens-saved">
+                    <span className="tokens-label">Сэкономлено:</span>
+                    <span className="tokens-value">{compressionInfo.tokens_saved.toLocaleString()} ({Math.round((compressionInfo.tokens_saved / compressionInfo.tokens_before_compression) * 100)}%)</span>
+                  </div>
+                )}
+              </div>
+            )}
             <div className="compression-sidebar-content">
               <MarkdownContent content={compressionInfo.summary} />
             </div>

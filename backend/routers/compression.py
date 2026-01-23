@@ -24,6 +24,33 @@ class SummarizeRequest(BaseModel):
     messages: List[Dict[str, str]]
 
 
+def _estimate_tokens(text: str) -> int:
+    """
+    Приблизительная оценка количества токенов в тексте
+    Для русского текста: примерно 1 токен = 2.5 символа
+    Для английского: примерно 1 токен = 4 символа
+    Используем среднее значение: 1 токен = 3 символа
+    """
+    if not text:
+        return 0
+    # Базовое правило: примерно 1 токен на 3 символа
+    # Добавляем небольшой запас для знаков препинания и пробелов
+    return max(1, len(text) // 3)
+
+
+def _estimate_messages_tokens(messages: List[Dict[str, str]]) -> int:
+    """
+    Приблизительная оценка токенов для списка сообщений
+    """
+    total = 0
+    for msg in messages:
+        content = msg.get("content", "")
+        role = msg.get("role", "")
+        # Добавляем токены для роли и форматирования
+        total += _estimate_tokens(role) + _estimate_tokens(content) + 4  # +4 для форматирования сообщения
+    return total
+
+
 def _create_summary_prompt(messages: List[Dict[str, str]]) -> str:
     """
     Создает промпт для суммаризации истории диалога
@@ -156,8 +183,8 @@ async def chat_with_history(request: CompressionRequest):
         temperature = request.temperature if request.temperature is not None else 0.7
         max_tokens = request.max_tokens
         
-        # Проверяем, нужно ли делать суммаризацию (каждые 10 сообщений)
-        compression_threshold = 10
+        # Проверяем, нужно ли делать суммаризацию (каждые 5 сообщений)
+        compression_threshold = 5
         needs_compression = len(messages) >= compression_threshold
         
         compressed_messages = []
@@ -165,12 +192,12 @@ async def chat_with_history(request: CompressionRequest):
         summary_text = ""
         
         if needs_compression:
-            # Подсчитываем, сколько раз нужно сжать (каждые 10 сообщений)
-            # Берем сообщения для суммаризации (первые 10 или кратные 10)
+            # Подсчитываем, сколько раз нужно сжать (каждые 5 сообщений)
+            # Берем сообщения для суммаризации (первые 5 или кратные 5)
             messages_to_summarize = []
             remaining_messages = []
             
-            # Находим последнюю границу для суммаризации (кратную 10)
+            # Находим последнюю границу для суммаризации (кратную 5)
             last_compression_point = (len(messages) // compression_threshold) * compression_threshold
             
             if last_compression_point > 0:
@@ -193,10 +220,16 @@ async def chat_with_history(request: CompressionRequest):
         else:
             compressed_messages = messages
         
+        # Подсчитываем токены до компрессии
+        tokens_before_compression = _estimate_messages_tokens(messages)
+        
         # Отправляем запрос с полной историей (сжатой или нет)
         logger.info(f"Sending request with {len(compressed_messages)} messages (compressed: {summary_created})")
         
         data = await call_deepseek_api(compressed_messages, temperature=temperature, max_tokens=max_tokens)
+        
+        # Подсчитываем токены после компрессии
+        tokens_after_compression = _estimate_messages_tokens(compressed_messages)
         
         if "choices" in data and len(data["choices"]) > 0:
             choice = data["choices"][0]
@@ -252,7 +285,10 @@ async def chat_with_history(request: CompressionRequest):
                 "compression_applied": summary_created,
                 "original_message_count": len(messages),
                 "compressed_message_count": len(compressed_messages),
-                "summary": summary_text if summary_created else None
+                "summary": summary_text if summary_created else None,
+                "tokens_before_compression": tokens_before_compression,
+                "tokens_after_compression": tokens_after_compression,
+                "tokens_saved": tokens_before_compression - tokens_after_compression if summary_created else 0
             }
             
             # Добавляем информацию о токенах
@@ -285,8 +321,8 @@ async def chat_with_history_stream(request: CompressionRequest):
         temperature = request.temperature if request.temperature is not None else 0.7
         max_tokens = request.max_tokens
         
-        # Проверяем, нужно ли делать суммаризацию
-        compression_threshold = 10
+        # Проверяем, нужно ли делать суммаризацию (каждые 5 сообщений)
+        compression_threshold = 5
         needs_compression = len(messages) >= compression_threshold
         
         compressed_messages = []
