@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import './SystemPromptTest.css'
+import MarkdownContent from './MarkdownContent'
 
 interface Message {
   id: string
@@ -401,7 +402,7 @@ function SystemPromptTest() {
                       }`}
                     >
                       <div className="message-content">
-                        {message.content}
+                        <MarkdownContent content={message.content} />
                         {message.isTyping && <span className="typing-cursor">▊</span>}
                       </div>
                       {isAfterSystemChange && (

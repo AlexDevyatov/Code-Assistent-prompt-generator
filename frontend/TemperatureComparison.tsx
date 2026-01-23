@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import './TemperatureComparison.css'
+import MarkdownContent from './MarkdownContent'
 
 interface TemperatureResult {
   id: string
@@ -382,7 +383,9 @@ ${responsesText}
                     ) : result.error ? (
                       <div className="error-message">Ошибка: {result.error}</div>
                     ) : (
-                      <div className="result-text">{result.response}</div>
+                      <div className="result-text">
+                        <MarkdownContent content={result.response} />
+                      </div>
                     )}
                   </div>
                 </div>

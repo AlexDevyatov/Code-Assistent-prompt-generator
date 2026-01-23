@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import './App.css'
 import './CompressionTest.css'
 import { Link } from 'react-router-dom'
+import MarkdownContent from './MarkdownContent'
 
 interface Message {
   id: string
@@ -323,7 +324,7 @@ function CompressionTest() {
           </div>
           <div className="compression-summary">
             <strong>Summary:</strong>
-            <p>{compressionInfo.summary}</p>
+            <MarkdownContent content={compressionInfo.summary} />
           </div>
         </div>
       )}
@@ -341,7 +342,9 @@ function CompressionTest() {
                   : 'message-assistant'
               }`}
             >
-              <div className="message-content">{message.content}</div>
+              <div className="message-content">
+                <MarkdownContent content={message.content} />
+              </div>
             </div>
           ))}
           <div ref={messagesEndRef} />

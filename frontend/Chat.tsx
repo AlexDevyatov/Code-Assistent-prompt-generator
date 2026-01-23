@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import './App.css'
 import { SYSTEM_PROMPT } from './constants'
 import { Link } from 'react-router-dom'
+import MarkdownContent from './MarkdownContent'
 
 interface Message {
   id: string
@@ -182,7 +183,9 @@ function Chat() {
               key={message.id}
               className={`message ${message.role === 'user' ? 'message-user' : 'message-assistant'}`}
             >
-              <div className="message-content">{message.content}</div>
+              <div className="message-content">
+                <MarkdownContent content={message.content} />
+              </div>
               {message.role === 'assistant' && 
                !message.isTyping && 
                message.content !== '...' && 
