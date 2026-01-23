@@ -316,39 +316,40 @@ function CompressionTest() {
         <button className="clear-button" onClick={handleClear}>Очистить</button>
       </div>
 
-      {compressionInfo && compressionInfo.compressed && compressionInfo.summary && (
-        <div className="compression-notice">
-          <div className="compression-notice-header">
-            <strong>Суммаризация применена</strong>
-            <span>{compressionInfo.original_count} сообщений сжато</span>
-          </div>
-          <div className="compression-summary">
-            <strong>Summary:</strong>
-            <MarkdownContent content={compressionInfo.summary} />
-          </div>
-        </div>
-      )}
-
-      <div className="chat-container">
-        <div className="messages">
-          {messages.map((message) => (
-            <div
-              key={message.id}
-              className={`message ${
-                message.role === 'user' 
-                  ? 'message-user' 
-                  : message.role === 'system' || message.isSummary
-                  ? 'message-system'
-                  : 'message-assistant'
-              }`}
-            >
-              <div className="message-content">
-                <MarkdownContent content={message.content} />
+      <div className="compression-layout">
+        <div className="chat-container">
+          <div className="messages">
+            {messages.map((message) => (
+              <div
+                key={message.id}
+                className={`message ${
+                  message.role === 'user' 
+                    ? 'message-user' 
+                    : message.role === 'system' || message.isSummary
+                    ? 'message-system'
+                    : 'message-assistant'
+                }`}
+              >
+                <div className="message-content">
+                  <MarkdownContent content={message.content} />
+                </div>
               </div>
-            </div>
-          ))}
-          <div ref={messagesEndRef} />
+            ))}
+            <div ref={messagesEndRef} />
+          </div>
         </div>
+
+        {compressionInfo && compressionInfo.compressed && compressionInfo.summary && (
+          <div className="compression-sidebar">
+            <div className="compression-sidebar-header">
+              <strong>Суммаризация</strong>
+              <span className="compression-count">{compressionInfo.original_count} сообщений сжато</span>
+            </div>
+            <div className="compression-sidebar-content">
+              <MarkdownContent content={compressionInfo.summary} />
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="input-panel">

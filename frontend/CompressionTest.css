@@ -55,51 +55,95 @@
   background-color: #bd2130;
 }
 
-.compression-notice {
-  margin: 16px 20px;
+.compression-layout {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  gap: 0;
+}
+
+.compression-layout .chat-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  padding: 20px;
+  padding-bottom: 120px;
+  background-color: #ffffff;
+  -webkit-overflow-scrolling: touch;
+}
+
+.compression-sidebar {
+  width: 350px;
+  min-width: 300px;
+  max-width: 400px;
+  background-color: #f8f9fa;
+  border-left: 1px solid #e0e0e0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.compression-sidebar-header {
   padding: 16px;
   background-color: #e7f3ff;
-  border: 1px solid #b3d9ff;
-  border-radius: 8px;
-  border-left: 4px solid #0066cc;
-}
-
-.compression-notice-header {
+  border-bottom: 1px solid #b3d9ff;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-  font-size: 14px;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.compression-notice-header strong {
+.compression-sidebar-header strong {
   color: #0066cc;
   font-size: 16px;
+  font-weight: 600;
 }
 
-.compression-notice-header span {
+.compression-count {
   color: #666;
   font-size: 13px;
 }
 
-.compression-summary {
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid #b3d9ff;
+.compression-sidebar-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  -webkit-overflow-scrolling: touch;
 }
 
-.compression-summary strong {
-  display: block;
-  margin-bottom: 8px;
-  color: #0066cc;
+.compression-sidebar-content .markdown-content {
   font-size: 14px;
-}
-
-.compression-summary p {
-  color: #333;
   line-height: 1.6;
-  margin: 0;
-  font-size: 14px;
+  color: #333;
+}
+
+.compression-sidebar-content .markdown-h1,
+.compression-sidebar-content .markdown-h2,
+.compression-sidebar-content .markdown-h3,
+.compression-sidebar-content .markdown-h4 {
+  margin-top: 0.8em;
+  margin-bottom: 0.4em;
+}
+
+.compression-sidebar-content .markdown-p {
+  margin: 0.5em 0;
+}
+
+.compression-sidebar-content .markdown-ul,
+.compression-sidebar-content .markdown-ol {
+  margin: 0.5em 0;
+  padding-left: 1.2em;
+}
+
+.compression-sidebar-content .markdown-code-inline {
+  font-size: 0.85em;
+  padding: 0.15em 0.3em;
+}
+
+.compression-sidebar-content .markdown-pre {
+  margin: 0.5em 0;
+  padding: 0.75em;
+  font-size: 0.85em;
 }
 
 .message-system {
@@ -131,10 +175,23 @@
     width: 100%;
   }
 
-  .compression-notice-header {
+  .compression-layout {
     flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
+  }
+
+  .compression-sidebar {
+    width: 100%;
+    max-width: 100%;
+    min-width: 100%;
+    border-left: none;
+    border-top: 1px solid #e0e0e0;
+    max-height: 300px;
+  }
+
+  .compression-sidebar-header {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
   }
 }
 
