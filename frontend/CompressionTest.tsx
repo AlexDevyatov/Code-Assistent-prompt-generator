@@ -187,17 +187,26 @@ function CompressionTest() {
         }
         setSummaryMessage(newSummaryMessage)
 
-        // Помечаем старые сообщения как сжатые (кроме последних, которые остались после сжатия)
+        // Помечаем старые сообщения как сжатые
         setMessages((prev) => {
+          // Находим видимые сообщения (не welcome, не typing, не уже сжатые)
           const visibleMessages = prev.filter(
             msg => msg.id !== 'welcome' && !msg.isTyping && !compressedMessageIds.has(msg.id)
           )
-          const messagesToCompress = visibleMessages.slice(0, data.original_message_count! - data.compressed_message_count!)
-          const idsToCompress = new Set(messagesToCompress.map(msg => msg.id))
+          
+          // Определяем, сколько сообщений нужно сжать
+          // original_count - это количество сообщений до сжатия, compressed_count - после
+          // Разница показывает, сколько сообщений было заменено на summary
+          const messagesToCompressCount = (data.original_message_count || 0) - (data.compressed_message_count || 0)
+          const messagesToCompress = visibleMessages.slice(0, messagesToCompressCount)
+          const idsToCompress = messagesToCompress.map(msg => msg.id)
+          
+          // Обновляем множество сжатых ID
           setCompressedMessageIds(prevIds => new Set([...prevIds, ...idsToCompress]))
           
-          // Удаляем старый summary, если был
-          const withoutOldSummary = prev.filter(msg => !msg.isSummary || msg.id === newSummaryMessage.id)
+          // Удаляем старый summary, если был, и добавляем новый
+          const withoutOldSummary = prev.filter(msg => !msg.isSummary)
+          
           // Вставляем новый summary после welcome
           const welcomeIndex = withoutOldSummary.findIndex(msg => msg.id === 'welcome')
           if (welcomeIndex >= 0) {
