@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 _project_root = Path(__file__).resolve().parent.parent.parent
 _DB_DIR = Path(os.environ["SUMMARIES_DB_DIR"]) if os.environ.get("SUMMARIES_DB_DIR") else (_project_root / "data")
 _DB_PATH = _DB_DIR / "summaries.db"
+_db_available = False  # устанавливается в True в init_db() при успехе
 
 _CREATE_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS summaries (
@@ -28,41 +29,65 @@ def _get_connection() -> sqlite3.Connection:
 
 
 def init_db() -> None:
-    """Инициализация БД: создаёт таблицу summaries при первом запуске."""
-    with _get_connection() as conn:
-        conn.execute(_CREATE_TABLE_SQL)
-        conn.commit()
-    logger.info("Summaries DB initialized at %s", _DB_PATH)
+    """Инициализация БД: создаёт таблицу summaries при первом запуске. При ошибке прав — логирует и не падает."""
+    global _db_available
+    try:
+        with _get_connection() as conn:
+            conn.execute(_CREATE_TABLE_SQL)
+            conn.commit()
+        _db_available = True
+        logger.info("Summaries DB initialized at %s", _DB_PATH)
+    except OSError as e:
+        _db_available = False
+        logger.warning(
+            "Summaries DB unavailable (directory %s not writable): %s. Summaries will not be persisted.",
+            _DB_DIR,
+            e,
+        )
 
 
 def save_summary(summary_text: str) -> None:
     """Сохраняет одну суммаризацию в БД."""
-    if not summary_text or not summary_text.strip():
+    if not _db_available or not summary_text or not summary_text.strip():
         return
-    with _get_connection() as conn:
-        conn.execute(
-            "INSERT INTO summaries (summary) VALUES (?)",
-            (summary_text.strip(),),
-        )
-        conn.commit()
-    logger.info("Saved summary, length=%d", len(summary_text))
+    try:
+        with _get_connection() as conn:
+            conn.execute(
+                "INSERT INTO summaries (summary) VALUES (?)",
+                (summary_text.strip(),),
+            )
+            conn.commit()
+        logger.info("Saved summary, length=%d", len(summary_text))
+    except OSError as e:
+        logger.warning("Could not save summary: %s", e)
 
 
 def get_latest_summary() -> Optional[str]:
     """Возвращает текст последней сохранённой суммаризации или None."""
-    with _get_connection() as conn:
-        conn.row_factory = sqlite3.Row
-        row = conn.execute(
-            "SELECT summary FROM summaries ORDER BY id DESC LIMIT 1"
-        ).fetchone()
-    if row is None:
+    if not _db_available:
         return None
-    return row["summary"]
+    try:
+        with _get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            row = conn.execute(
+                "SELECT summary FROM summaries ORDER BY id DESC LIMIT 1"
+            ).fetchone()
+        if row is None:
+            return None
+        return row["summary"]
+    except OSError as e:
+        logger.warning("Could not read latest summary: %s", e)
+        return None
 
 
 def clear_all() -> None:
     """Удаляет все записи из таблицы summaries."""
-    with _get_connection() as conn:
-        conn.execute("DELETE FROM summaries")
-        conn.commit()
-    logger.info("Cleared all summaries")
+    if not _db_available:
+        return
+    try:
+        with _get_connection() as conn:
+            conn.execute("DELETE FROM summaries")
+            conn.commit()
+        logger.info("Cleared all summaries")
+    except OSError as e:
+        logger.warning("Could not clear summaries: %s", e)
