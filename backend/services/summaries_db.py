@@ -2,6 +2,7 @@
 import os
 import sqlite3
 import logging
+import tempfile
 from pathlib import Path
 from typing import Optional
 
@@ -25,25 +26,48 @@ CREATE TABLE IF NOT EXISTS summaries (
 def _get_connection() -> sqlite3.Connection:
     """Новое соединение для каждого запроса — потокобезопасно."""
     _DB_DIR.mkdir(parents=True, exist_ok=True)
-    return sqlite3.connect(_DB_PATH, isolation_level="DEFERRED")
+    return sqlite3.connect(str(_DB_PATH), isolation_level="DEFERRED")
+
+
+def _try_init_at(db_dir: Path, db_path: Path) -> bool:
+    """Создаёт каталог, таблицу и возвращает True при успехе, иначе False."""
+    try:
+        db_dir.mkdir(parents=True, exist_ok=True)
+        with sqlite3.connect(str(db_path), isolation_level="DEFERRED") as conn:
+            conn.execute(_CREATE_TABLE_SQL)
+            conn.commit()
+        return True
+    except OSError:
+        return False
 
 
 def init_db() -> None:
-    """Инициализация БД: создаёт таблицу summaries при первом запуске. При ошибке прав — логирует и не падает."""
-    global _db_available
-    try:
-        with _get_connection() as conn:
-            conn.execute(_CREATE_TABLE_SQL)
-            conn.commit()
+    """Инициализация БД: основной путь, при ошибке — запасной в TMPDIR/ /tmp, чтобы БД всегда работала."""
+    global _db_available, _DB_DIR, _DB_PATH
+    if _try_init_at(_DB_DIR, _DB_PATH):
         _db_available = True
         logger.info("Summaries DB initialized at %s", _DB_PATH)
-    except OSError as e:
-        _db_available = False
-        logger.warning(
-            "Summaries DB unavailable (directory %s not writable): %s. Summaries will not be persisted.",
-            _DB_DIR,
-            e,
+        return
+    logger.warning(
+        "Summaries DB path not writable: %s. Trying fallback directory.",
+        _DB_DIR,
+    )
+    fallback_dir = Path(tempfile.gettempdir()) / "deepseek-web-client-summaries"
+    fallback_path = fallback_dir / "summaries.db"
+    if _try_init_at(fallback_dir, fallback_path):
+        _DB_DIR = fallback_dir
+        _DB_PATH = fallback_path
+        _db_available = True
+        logger.info(
+            "Summaries DB initialized at fallback %s (set SUMMARIES_DB_DIR or run fix_service.sh for persistent path).",
+            _DB_PATH,
         )
+        return
+    _db_available = False
+    logger.warning(
+        "Summaries DB unavailable: primary path and fallback %s failed. Summaries will not be persisted.",
+        fallback_dir,
+    )
 
 
 def save_summary(summary_text: str) -> None:
@@ -78,6 +102,11 @@ def get_latest_summary() -> Optional[str]:
     except OSError as e:
         logger.warning("Could not read latest summary: %s", e)
         return None
+
+
+def is_db_available() -> bool:
+    """Возвращает True, если БД суммаризаций доступна (успешно инициализирована при старте)."""
+    return _db_available
 
 
 def clear_all() -> None:

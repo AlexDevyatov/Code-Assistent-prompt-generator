@@ -2,11 +2,17 @@
 import logging
 from fastapi import APIRouter
 
-from backend.services.summaries_db import get_latest_summary, clear_all
+from backend.services.summaries_db import get_latest_summary, clear_all, is_db_available
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["summaries"])
+
+
+@router.get("/summaries/status")
+def api_summaries_status():
+    """Возвращает статус БД суммаризаций (для проверки после деплоя)."""
+    return {"db_available": is_db_available()}
 
 
 @router.get("/summaries/latest")

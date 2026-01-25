@@ -192,6 +192,16 @@ if netstat -tuln 2>/dev/null | grep -q ":8000 " || ss -tuln 2>/dev/null | grep -
     else
         echo -e "${YELLOW}⚠️  Health endpoint не отвечает${NC}"
     fi
+    # Статус БД суммаризаций
+    if DB_STATUS=$(curl -s http://localhost:8000/api/summaries/status 2>/dev/null); then
+        if echo "$DB_STATUS" | grep -q '"db_available": true'; then
+            echo -e "${GREEN}✅ БД суммаризаций: инициализирована${NC}"
+        else
+            echo -e "${YELLOW}⚠️  БД суммаризаций: не инициализирована${NC}"
+        fi
+    else
+        echo -e "${YELLOW}⚠️  БД суммаризаций: статус не получен${NC}"
+    fi
 else
     echo -e "${YELLOW}⚠️  Порт 8000 не слушается${NC}"
 fi
