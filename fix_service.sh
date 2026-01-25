@@ -1,10 +1,18 @@
 #!/bin/bash
+# Исправление и перезапуск systemd-сервиса deepseek-web-client.
+# Использование:
+#   ./fix_service.sh              — полная проверка и исправление
+#   ./fix_service.sh --restart-only — только daemon-reload и перезапуск (для update.sh)
 
-# Скрипт для исправления проблемы с запуском systemd сервиса
-# Использование: ./fix_service.sh
+set -e
 
 SYSTEMD_FILE="/etc/systemd/system/deepseek-web-client.service"
-PROJECT_DIR="/opt/Code-Assistent-prompt-generator"
+PROJECT_DIR="${PROJECT_DIR:-/opt/Code-Assistent-prompt-generator}"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Если дефолтная директория не существует (запуск не на сервере), используем директорию скрипта
+if [ ! -d "$PROJECT_DIR" ]; then
+    PROJECT_DIR="$SCRIPT_DIR"
+fi
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -12,91 +20,98 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
+RESTART_ONLY=false
+for arg in "$@"; do
+    case "$arg" in
+        --restart-only) RESTART_ONLY=true ;;
+        --help|-h)
+            echo "Usage: $0 [--restart-only]"
+            echo "  --restart-only  только daemon-reload и перезапуск сервиса (все проверки через sudo)"
+            exit 0
+            ;;
+    esac
+done
+
+# Все проверки systemd и доступа к /etc — через sudo
+service_exists() {
+    sudo test -f "$SYSTEMD_FILE" 2>/dev/null
+}
+service_is_active() {
+    sudo systemctl is-active --quiet deepseek-web-client 2>/dev/null
+}
+
+do_restart_only() {
+    if ! service_exists; then
+        echo -e "${BLUE}ℹ️  Юнит не установлен: $SYSTEMD_FILE${NC}"
+        return 1
+    fi
+    echo -e "${YELLOW}Перезапуск сервиса deepseek-web-client...${NC}"
+    sudo systemctl daemon-reload
+    sudo systemctl restart deepseek-web-client
+    sleep 3
+    if service_is_active; then
+        echo -e "${GREEN}✅ Сервис перезапущен и работает${NC}"
+        return 0
+    else
+        echo -e "${RED}❌ Сервис не запустился${NC}"
+        echo -e "${YELLOW}Последние логи:${NC}"
+        sudo journalctl -u deepseek-web-client -n 20 --no-pager 2>/dev/null || true
+        return 1
+    fi
+}
+
+if [ "$RESTART_ONLY" = true ]; then
+    do_restart_only
+    exit $?
+fi
+
+# ─── Полный цикл исправления ─────────────────────────────────────────────────
 echo -e "${BLUE}════════════════════════════════════════${NC}"
-echo -e "${BLUE}🔧 Исправление проблемы с systemd сервисом${NC}"
+echo -e "${BLUE}🔧 Исправление systemd-сервиса deepseek-web-client${NC}"
 echo -e "${BLUE}════════════════════════════════════════${NC}"
 echo ""
 
-# 1. Проверка существования проекта
-echo -e "${YELLOW}1. Проверка директории проекта...${NC}"
+echo -e "${YELLOW}1. Директория проекта${NC}"
 if [ ! -d "$PROJECT_DIR" ]; then
-    echo -e "${RED}❌ Директория проекта не найдена: $PROJECT_DIR${NC}"
-    echo -e "${YELLOW}💡 Укажите правильный путь к проекту${NC}"
+    echo -e "${RED}❌ Не найдена: $PROJECT_DIR${NC}"
     exit 1
 fi
-echo -e "${GREEN}✅ Директория проекта найдена${NC}"
+echo -e "${GREEN}✅ $PROJECT_DIR${NC}"
 cd "$PROJECT_DIR"
 echo ""
 
-# 2. Проверка виртуального окружения
-echo -e "${YELLOW}2. Проверка виртуального окружения...${NC}"
+echo -e "${YELLOW}2. Виртуальное окружение${NC}"
 if [ ! -d "venv" ]; then
-    echo -e "${YELLOW}⚠️  Виртуальное окружение не найдено, создание...${NC}"
+    echo -e "${YELLOW}   Создаю venv...${NC}"
     python3 -m venv venv
-    echo -e "${GREEN}✅ Виртуальное окружение создано${NC}"
-else
-    echo -e "${GREEN}✅ Виртуальное окружение найдено${NC}"
 fi
-
-# Активируем venv и проверяем uvicorn
+echo -e "${GREEN}✅ venv${NC}"
 source venv/bin/activate
 echo ""
 
-# 3. Проверка uvicorn
-echo -e "${YELLOW}3. Проверка uvicorn...${NC}"
-UVICORN_PATH="venv/bin/uvicorn"
-if [ ! -f "$UVICORN_PATH" ]; then
-    echo -e "${YELLOW}⚠️  uvicorn не найден, установка зависимостей...${NC}"
-    if [ -f "requirements.txt" ]; then
-        pip install -r requirements.txt
-        echo -e "${GREEN}✅ Зависимости установлены${NC}"
-    else
-        echo -e "${RED}❌ requirements.txt не найден${NC}"
-        pip install fastapi uvicorn httpx python-dotenv pydantic
-        echo -e "${GREEN}✅ Базовые зависимости установлены${NC}"
-    fi
-else
-    echo -e "${GREEN}✅ uvicorn найден${NC}"
+echo -e "${YELLOW}3. Зависимости и uvicorn${NC}"
+if [ ! -f "venv/bin/uvicorn" ]; then
+    pip install -r requirements.txt --quiet 2>/dev/null || pip install -r requirements.txt
 fi
-
-# Проверяем, что uvicorn работает
-if [ -f "$UVICORN_PATH" ]; then
-    UVICORN_ABS_PATH="$(pwd)/$UVICORN_PATH"
-    echo -e "${BLUE}   Путь к uvicorn: $UVICORN_ABS_PATH${NC}"
-    
-    # Проверяем права на выполнение
-    if [ ! -x "$UVICORN_PATH" ]; then
-        echo -e "${YELLOW}⚠️  Нет прав на выполнение, исправление...${NC}"
-        chmod +x "$UVICORN_PATH"
-    fi
-else
-    echo -e "${RED}❌ uvicorn все еще не найден после установки${NC}"
-    exit 1
-fi
+[ -x "venv/bin/uvicorn" ] || chmod +x venv/bin/uvicorn
+echo -e "${GREEN}✅ uvicorn${NC}"
 deactivate
 echo ""
 
-# 4. Проверка backend/main.py
-echo -e "${YELLOW}4. Проверка backend/main.py...${NC}"
+echo -e "${YELLOW}4. backend/main.py${NC}"
 if [ ! -f "backend/main.py" ]; then
     echo -e "${RED}❌ backend/main.py не найден${NC}"
     exit 1
 fi
-echo -e "${GREEN}✅ backend/main.py найден${NC}"
+echo -e "${GREEN}✅ backend/main.py${NC}"
 echo ""
 
-# 5. Обновление systemd файла
-echo -e "${YELLOW}5. Обновление конфигурации systemd...${NC}"
-if [ ! -f "$SYSTEMD_FILE" ]; then
-    echo -e "${RED}❌ Файл systemd не найден: $SYSTEMD_FILE${NC}"
-    echo -e "${YELLOW}Создание файла сервиса...${NC}"
-    
-    # Определяем пользователя
-    SERVICE_USER=$(whoami)
-    if [ "$SERVICE_USER" = "root" ]; then
-        SERVICE_USER="www-data"
-    fi
-    
+echo -e "${YELLOW}5. Конфигурация systemd${NC}"
+SERVICE_USER="$(whoami)"
+[ "$SERVICE_USER" = "root" ] && SERVICE_USER="www-data"
+
+if ! service_exists; then
+    echo -e "${YELLOW}   Создаю юнит $SYSTEMD_FILE${NC}"
     sudo tee "$SYSTEMD_FILE" > /dev/null <<EOF
 [Unit]
 Description=DeepSeek Web Client API
@@ -114,101 +129,63 @@ RestartSec=10
 [Install]
 WantedBy=multi-user.target
 EOF
-    echo -e "${GREEN}✅ Файл сервиса создан${NC}"
+    echo -e "${GREEN}✅ Юнит создан${NC}"
 else
-    echo -e "${GREEN}✅ Файл сервиса найден${NC}"
-    
-    # Обновляем пути в существующем файле
-    echo -e "${YELLOW}Обновление путей в конфигурации...${NC}"
-    
-    # Создаем резервную копию
-    BACKUP_FILE="${SYSTEMD_FILE}.backup.$(date +%Y%m%d_%H%M%S)"
-    sudo cp "$SYSTEMD_FILE" "$BACKUP_FILE"
-    echo -e "${GREEN}✅ Резервная копия создана: $BACKUP_FILE${NC}"
-    
-    # Обновляем WorkingDirectory
+    echo -e "${YELLOW}   Обновляю пути в юните...${NC}"
     sudo sed -i "s|WorkingDirectory=.*|WorkingDirectory=$PROJECT_DIR|g" "$SYSTEMD_FILE"
-    
-    # Обновляем ExecStart
     sudo sed -i "s|ExecStart=.*|ExecStart=$PROJECT_DIR/venv/bin/uvicorn backend.main:app --host 0.0.0.0 --port 8000|g" "$SYSTEMD_FILE"
-    
-    # Обновляем PATH
     sudo sed -i "s|Environment=\"PATH=.*|Environment=\"PATH=$PROJECT_DIR/venv/bin\"|g" "$SYSTEMD_FILE"
-    
-    echo -e "${GREEN}✅ Конфигурация обновлена${NC}"
+    echo -e "${GREEN}✅ Юнит обновлён${NC}"
 fi
-
-# Показываем обновленную конфигурацию
-echo ""
-echo -e "${BLUE}Текущая конфигурация:${NC}"
-echo -e "${BLUE}WorkingDirectory:${NC}"
-grep "WorkingDirectory" "$SYSTEMD_FILE" | head -1
-echo -e "${BLUE}ExecStart:${NC}"
-grep "ExecStart" "$SYSTEMD_FILE" | head -1
+echo -e "${BLUE}   WorkingDirectory:${NC}"
+sudo grep "WorkingDirectory" "$SYSTEMD_FILE" | head -1
+echo -e "${BLUE}   ExecStart:${NC}"
+sudo grep "ExecStart" "$SYSTEMD_FILE" | head -1
 echo ""
 
-# 6. Перезагрузка systemd и запуск сервиса
-echo -e "${YELLOW}6. Перезагрузка systemd...${NC}"
+echo -e "${YELLOW}6. systemd daemon-reload${NC}"
 sudo systemctl daemon-reload
-echo -e "${GREEN}✅ Systemd перезагружен${NC}"
+echo -e "${GREEN}✅ daemon-reload${NC}"
 echo ""
 
-# 7. Проверка прав доступа
-echo -e "${YELLOW}7. Проверка прав доступа...${NC}"
-SERVICE_USER=$(grep "^User=" "$SYSTEMD_FILE" | cut -d'=' -f2)
+echo -e "${YELLOW}7. Права доступа${NC}"
+SERVICE_USER="$(sudo grep "^User=" "$SYSTEMD_FILE" | cut -d'=' -f2)"
 if [ -n "$SERVICE_USER" ]; then
-    echo -e "${BLUE}   Пользователь сервиса: $SERVICE_USER${NC}"
-    
-    # Проверяем права на директорию проекта
-    if sudo -u "$SERVICE_USER" test -r "$PROJECT_DIR/backend/main.py"; then
-        echo -e "${GREEN}✅ Пользователь $SERVICE_USER имеет доступ к проекту${NC}"
-    else
-        echo -e "${YELLOW}⚠️  Проблемы с правами доступа${NC}"
-        echo -e "${YELLOW}   Установка прав...${NC}"
+    if ! sudo -u "$SERVICE_USER" test -r "$PROJECT_DIR/backend/main.py" 2>/dev/null; then
+        echo -e "${YELLOW}   Выставляю владельца $SERVICE_USER для $PROJECT_DIR${NC}"
         sudo chown -R "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR" 2>/dev/null || true
-        echo -e "${GREEN}✅ Права обновлены${NC}"
     fi
+    echo -e "${GREEN}✅ Пользователь сервиса: $SERVICE_USER${NC}"
 fi
 echo ""
 
-# 8. Запуск сервиса
-echo -e "${YELLOW}8. Запуск сервиса...${NC}"
+echo -e "${YELLOW}8. Запуск сервиса${NC}"
 sudo systemctl stop deepseek-web-client 2>/dev/null || true
 sleep 1
 sudo systemctl start deepseek-web-client
 sleep 3
+echo ""
 
-# 9. Проверка статуса
-echo -e "${YELLOW}9. Проверка статуса...${NC}"
-if systemctl is-active --quiet deepseek-web-client; then
-    echo -e "${GREEN}✅ Сервис запущен и работает!${NC}"
-    
-    # Проверяем порт
-    sleep 2
-    if netstat -tuln 2>/dev/null | grep -q ":8000 " || ss -tuln 2>/dev/null | grep -q ":8000 "; then
+echo -e "${YELLOW}9. Проверка${NC}"
+if service_is_active; then
+    echo -e "${GREEN}✅ Сервис запущен${NC}"
+    if ss -tuln 2>/dev/null | grep -q ":8000 " || netstat -tuln 2>/dev/null | grep -q ":8000 "; then
         echo -e "${GREEN}✅ Порт 8000 слушается${NC}"
     fi
-    
-    # Проверяем health endpoint
-    sleep 1
     if curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/api/health 2>/dev/null | grep -q "200"; then
-        echo -e "${GREEN}✅ Health endpoint отвечает${NC}"
+        echo -e "${GREEN}✅ /api/health отвечает 200${NC}"
     fi
 else
     echo -e "${RED}❌ Сервис не запустился${NC}"
-    echo -e "${YELLOW}Последние логи:${NC}"
-    sudo journalctl -u deepseek-web-client -n 10 --no-pager
+    echo -e "${YELLOW}Логи:${NC}"
+    sudo journalctl -u deepseek-web-client -n 15 --no-pager 2>/dev/null || true
     exit 1
 fi
 
 echo ""
 echo -e "${GREEN}════════════════════════════════════════${NC}"
-echo -e "${GREEN}✅ Проблема исправлена!${NC}"
+echo -e "${GREEN}✅ Готово${NC}"
 echo -e "${GREEN}════════════════════════════════════════${NC}"
+echo -e "   Статус: sudo systemctl status deepseek-web-client"
+echo -e "   Логи:   sudo journalctl -u deepseek-web-client -f"
 echo ""
-echo -e "${BLUE}📋 Следующие шаги:${NC}"
-echo -e "   1. Откройте порт в файрволе: sudo ufw allow 8000/tcp"
-echo -e "   2. Проверьте доступность: curl http://localhost:8000/api/health"
-echo -e "   3. Проверьте статус: sudo systemctl status deepseek-web-client"
-echo ""
-

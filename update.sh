@@ -164,24 +164,17 @@ if [ "$FULL_UPDATE" = true ]; then
     echo ""
 fi
 
-# 6. Перезапуск сервиса (проверки через sudo, чтобы работало при запуске от пользователя без прав на systemd)
+# 6. Перезапуск сервиса (через fix_service.sh --restart-only, все проверки под sudo)
 echo -e "${YELLOW}6. Перезапуск сервиса...${NC}"
-if sudo systemctl is-active --quiet deepseek-web-client 2>/dev/null || \
-   sudo test -f "/etc/systemd/system/deepseek-web-client.service" 2>/dev/null; then
-    if sudo systemctl restart deepseek-web-client 2>/dev/null; then
-        sleep 3
-        if sudo systemctl is-active --quiet deepseek-web-client 2>/dev/null; then
-            echo -e "${GREEN}✅ Сервис перезапущен и работает${NC}"
-        else
-            echo -e "${RED}❌ Сервис не запустился${NC}"
-            echo -e "${YELLOW}💡 Проверьте логи: sudo journalctl -u deepseek-web-client -n 50${NC}"
-            echo -e "${YELLOW}💡 Запустите fix_service.sh для исправления проблем${NC}"
-        fi
+if [ -f "$PROJECT_DIR/fix_service.sh" ]; then
+    chmod +x "$PROJECT_DIR/fix_service.sh" 2>/dev/null || true
+    if "$PROJECT_DIR/fix_service.sh" --restart-only; then
+        :
     else
-        echo -e "${YELLOW}⚠️  Не удалось перезапустить сервис${NC}"
+        echo -e "${YELLOW}💡 Запустите ./fix_service.sh для полной диагностики и исправления${NC}"
     fi
 else
-    echo -e "${BLUE}ℹ️  Сервис не установлен или не активен${NC}"
+    echo -e "${BLUE}ℹ️  fix_service.sh не найден, пропуск перезапуска${NC}"
 fi
 echo ""
 
