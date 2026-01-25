@@ -164,13 +164,13 @@ if [ "$FULL_UPDATE" = true ]; then
     echo ""
 fi
 
-# 6. Перезапуск сервиса
+# 6. Перезапуск сервиса (проверки через sudo, чтобы работало при запуске от пользователя без прав на systemd)
 echo -e "${YELLOW}6. Перезапуск сервиса...${NC}"
-if systemctl is-active --quiet deepseek-web-client 2>/dev/null || \
-   [ -f "/etc/systemd/system/deepseek-web-client.service" ]; then
+if sudo systemctl is-active --quiet deepseek-web-client 2>/dev/null || \
+   sudo test -f "/etc/systemd/system/deepseek-web-client.service" 2>/dev/null; then
     if sudo systemctl restart deepseek-web-client 2>/dev/null; then
         sleep 3
-        if systemctl is-active --quiet deepseek-web-client 2>/dev/null; then
+        if sudo systemctl is-active --quiet deepseek-web-client 2>/dev/null; then
             echo -e "${GREEN}✅ Сервис перезапущен и работает${NC}"
         else
             echo -e "${RED}❌ Сервис не запустился${NC}"
