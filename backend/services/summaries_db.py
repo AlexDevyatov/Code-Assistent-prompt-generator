@@ -1,4 +1,5 @@
 """Хранение суммаризаций диалога в SQLite (только stdlib sqlite3, потокобезопасно)."""
+import os
 import sqlite3
 import logging
 from pathlib import Path
@@ -6,8 +7,9 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-# Путь к БД в директории с гарантированными правами записи пользователя
-_DB_DIR = Path.home() / ".local" / "share" / "code-assistent-prompt-generator" / "data"
+# Путь к каталогу БД: SUMMARIES_DB_DIR в systemd, иначе проект/data (локально и если задано при деплое)
+_project_root = Path(__file__).resolve().parent.parent.parent
+_DB_DIR = Path(os.environ["SUMMARIES_DB_DIR"]) if os.environ.get("SUMMARIES_DB_DIR") else (_project_root / "data")
 _DB_PATH = _DB_DIR / "summaries.db"
 
 _CREATE_TABLE_SQL = """

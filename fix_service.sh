@@ -122,6 +122,7 @@ Type=simple
 User=$SERVICE_USER
 WorkingDirectory=$PROJECT_DIR
 Environment="PATH=$PROJECT_DIR/venv/bin"
+Environment="SUMMARIES_DB_DIR=$PROJECT_DIR/data"
 ExecStart=$PROJECT_DIR/venv/bin/uvicorn backend.main:app --host 0.0.0.0 --port 8000
 Restart=always
 RestartSec=10
@@ -135,6 +136,11 @@ else
     sudo sed -i "s|WorkingDirectory=.*|WorkingDirectory=$PROJECT_DIR|g" "$SYSTEMD_FILE"
     sudo sed -i "s|ExecStart=.*|ExecStart=$PROJECT_DIR/venv/bin/uvicorn backend.main:app --host 0.0.0.0 --port 8000|g" "$SYSTEMD_FILE"
     sudo sed -i "s|Environment=\"PATH=.*|Environment=\"PATH=$PROJECT_DIR/venv/bin\"|g" "$SYSTEMD_FILE"
+    if sudo grep -q 'SUMMARIES_DB_DIR' "$SYSTEMD_FILE" 2>/dev/null; then
+        sudo sed -i "s|Environment=\"SUMMARIES_DB_DIR=.*|Environment=\"SUMMARIES_DB_DIR=$PROJECT_DIR/data\"|g" "$SYSTEMD_FILE"
+    else
+        sudo sed -i "/Environment=\"PATH=/a Environment=\"SUMMARIES_DB_DIR=$PROJECT_DIR/data\"" "$SYSTEMD_FILE"
+    fi
     echo -e "${GREEN}✅ Юнит обновлён${NC}"
 fi
 echo -e "${BLUE}   WorkingDirectory:${NC}"
@@ -148,14 +154,16 @@ sudo systemctl daemon-reload
 echo -e "${GREEN}✅ daemon-reload${NC}"
 echo ""
 
-echo -e "${YELLOW}7. Права доступа${NC}"
+echo -e "${YELLOW}7. Права доступа и каталог для БД суммаризаций${NC}"
 SERVICE_USER="$(sudo grep "^User=" "$SYSTEMD_FILE" | cut -d'=' -f2)"
 if [ -n "$SERVICE_USER" ]; then
+    sudo mkdir -p "$PROJECT_DIR/data"
+    sudo chown "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR/data"
     if ! sudo -u "$SERVICE_USER" test -r "$PROJECT_DIR/backend/main.py" 2>/dev/null; then
         echo -e "${YELLOW}   Выставляю владельца $SERVICE_USER для $PROJECT_DIR${NC}"
         sudo chown -R "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR" 2>/dev/null || true
     fi
-    echo -e "${GREEN}✅ Пользователь сервиса: $SERVICE_USER${NC}"
+    echo -e "${GREEN}✅ Пользователь сервиса: $SERVICE_USER, каталог $PROJECT_DIR/data создан${NC}"
 fi
 echo ""
 
