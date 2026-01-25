@@ -7,6 +7,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from backend.services.deepseek_api import call_deepseek_api, stream_deepseek_api
+from backend.services.summaries_db import save_summary
 from backend.config import MAX_TOKENS
 
 logger = logging.getLogger(__name__)
@@ -183,8 +184,8 @@ async def chat_with_history(request: CompressionRequest):
         temperature = request.temperature if request.temperature is not None else 0.7
         max_tokens = request.max_tokens
         
-        # Проверяем, нужно ли делать суммаризацию (каждые 5 сообщений)
-        compression_threshold = 5
+        # Проверяем, нужно ли делать суммаризацию (каждые 10 сообщений)
+        compression_threshold = 10
         needs_compression = len(messages) >= compression_threshold
         
         compressed_messages = []
@@ -192,23 +193,20 @@ async def chat_with_history(request: CompressionRequest):
         summary_text = ""
         
         if needs_compression:
-            # Подсчитываем, сколько раз нужно сжать (каждые 5 сообщений)
-            # Берем сообщения для суммаризации (первые 5 или кратные 5)
+            # Подсчитываем, сколько раз нужно сжать (каждые 10 сообщений)
             messages_to_summarize = []
             remaining_messages = []
             
-            # Находим последнюю границу для суммаризации (кратную 5)
             last_compression_point = (len(messages) // compression_threshold) * compression_threshold
             
             if last_compression_point > 0:
                 messages_to_summarize = messages[:last_compression_point]
                 remaining_messages = messages[last_compression_point:]
                 
-                # Создаем суммаризацию
                 summary_text = await summarize_messages(messages_to_summarize)
                 summary_created = True
+                save_summary(summary_text)
                 
-                # Формируем сжатую историю: summary как system сообщение + оставшиеся
                 compressed_messages = [
                     {
                         "role": "system",
@@ -321,8 +319,8 @@ async def chat_with_history_stream(request: CompressionRequest):
         temperature = request.temperature if request.temperature is not None else 0.7
         max_tokens = request.max_tokens
         
-        # Проверяем, нужно ли делать суммаризацию (каждые 5 сообщений)
-        compression_threshold = 5
+        # Проверяем, нужно ли делать суммаризацию (каждые 10 сообщений)
+        compression_threshold = 10
         needs_compression = len(messages) >= compression_threshold
         
         compressed_messages = []
@@ -338,6 +336,7 @@ async def chat_with_history_stream(request: CompressionRequest):
                 
                 summary_text = await summarize_messages(messages_to_summarize)
                 summary_created = True
+                save_summary(summary_text)
                 
                 compressed_messages = [
                     {

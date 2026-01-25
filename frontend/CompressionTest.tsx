@@ -45,7 +45,7 @@ function CompressionTest() {
     {
       id: 'welcome',
       role: 'assistant',
-      content: 'Привет! Это тест сжатия истории диалога. Каждые 5 сообщений история будет автоматически сжиматься через суммаризацию. Начните диалог!',
+      content: 'Привет! Это тест сжатия истории диалога. Каждые 10 сообщений история будет автоматически сжиматься через суммаризацию. Начните диалог!',
     },
   ])
   const [input, setInput] = useState('')
@@ -72,6 +72,23 @@ function CompressionTest() {
       textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 200)}px`
     }
   }, [input])
+
+  // Загрузка последней сохранённой суммаризации при старте
+  useEffect(() => {
+    fetch('/api/summaries/latest')
+      .then((res) => (res.ok ? res.json() : Promise.resolve({ summary: null })))
+      .then((data: { summary?: string | null }) => {
+        if (data.summary && typeof data.summary === 'string') {
+          setSummaryMessage({
+            id: `summary-loaded-${Date.now()}`,
+            role: 'system',
+            content: data.summary,
+            isSummary: true,
+          })
+        }
+      })
+      .catch(() => {})
+  }, [])
 
   const typeMessage = (messageId: string, fullText: string) => {
     let currentIndex = 0
@@ -277,12 +294,17 @@ function CompressionTest() {
     }
   }
 
-  const handleClear = () => {
+  const handleClear = async () => {
+    try {
+      await fetch('/api/clear-history', { method: 'POST' })
+    } catch {
+      // игнорируем ошибку сети, локальное состояние всё равно сбрасываем
+    }
     setMessages([
       {
         id: 'welcome',
         role: 'assistant',
-        content: 'Привет! Это тест сжатия истории диалога. Каждые 5 сообщений история будет автоматически сжиматься через суммаризацию. Начните диалог!',
+        content: 'Привет! Это тест сжатия истории диалога. Каждые 10 сообщений история будет автоматически сжиматься через суммаризацию. Начните диалог!',
       },
     ])
     setCompressionInfo(null)

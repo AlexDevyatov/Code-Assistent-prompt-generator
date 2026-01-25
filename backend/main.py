@@ -5,7 +5,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.config import STATIC_DIR
-from backend.routers import chat, health, llama, compression
+from backend.routers import chat, health, llama, compression, summaries
+from backend.services.summaries_db import init_db
 
 # Настройка логирования
 logging.basicConfig(
@@ -30,6 +31,14 @@ app.include_router(chat.router)
 app.include_router(health.router)
 app.include_router(llama.router)
 app.include_router(compression.router)
+app.include_router(summaries.router)
+
+
+@app.on_event("startup")
+def on_startup():
+    """Инициализация БД суммаризаций при старте приложения."""
+    init_db()
+
 
 # Отдаём статические файлы из папки static
 # html=True позволяет отдавать index.html для всех маршрутов (SPA)
