@@ -6,9 +6,8 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-# Путь к БД: data/summaries.db в корне проекта
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-_DB_DIR = _PROJECT_ROOT / "data"
+# Путь к БД в директории с гарантированными правами записи пользователя
+_DB_DIR = Path.home() / ".local" / "share" / "code-assistent-prompt-generator" / "data"
 _DB_PATH = _DB_DIR / "summaries.db"
 
 _CREATE_TABLE_SQL = """
