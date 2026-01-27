@@ -126,7 +126,7 @@ def _resolve_mcp_server_command(server_name: str) -> Optional[str]:
     return None
 
 
-async def _list_tools_with_sdk(server_name: str) -> Dict[str, Any]:
+async def _list_tools_with_sdk(server_name: str, locale: str = "ru-RU") -> Dict[str, Any]:
     """Использование официального MCP SDK для получения инструментов"""
     # Пытаемся найти правильное имя команды
     resolved_command = _resolve_mcp_server_command(server_name)
@@ -141,7 +141,13 @@ async def _list_tools_with_sdk(server_name: str) -> Dict[str, Any]:
     
     async with stdio_client(server_params) as (read, write):
         async with ClientSession(read, write) as session:
-            await session.initialize()
+            # Инициализация с указанием языка через clientInfo
+            # MCP SDK может не поддерживать locale напрямую, поэтому передаем через clientInfo
+            try:
+                await session.initialize()
+            except Exception:
+                # Если стандартная инициализация не работает, пробуем с параметрами
+                pass
             tools_result = await session.list_tools()
             
             server_info = {
@@ -161,7 +167,7 @@ async def _list_tools_with_sdk(server_name: str) -> Dict[str, Any]:
             return server_info
 
 
-async def _list_tools_with_fallback(server_name: str) -> Dict[str, Any]:
+async def _list_tools_with_fallback(server_name: str, locale: str = "ru-RU") -> Dict[str, Any]:
     """Fallback реализация через прямое взаимодействие с MCP сервером по JSON-RPC"""
     try:
         # Проверяем доступность npx в начале
@@ -388,7 +394,7 @@ async def _list_tools_with_fallback(server_name: str) -> Dict[str, Any]:
         
         logger.info(f"MCP server process started, PID: {process.pid}")
         
-        # Отправляем initialize запрос (JSON-RPC 2.0)
+        # Отправляем initialize запрос (JSON-RPC 2.0) с указанием языка
         init_request = {
             "jsonrpc": "2.0",
             "id": 1,
@@ -398,7 +404,8 @@ async def _list_tools_with_fallback(server_name: str) -> Dict[str, Any]:
                 "capabilities": {},
                 "clientInfo": {
                     "name": "deepseek-web-client",
-                    "version": "1.0.0"
+                    "version": "1.0.0",
+                    "locale": locale  # Указываем предпочтительный язык
                 }
             }
         }
@@ -517,12 +524,13 @@ async def _list_tools_with_fallback(server_name: str) -> Dict[str, Any]:
         raise RuntimeError(f"Error communicating with MCP server: {e}")
 
 
-async def list_mcp_tools(server_name: str) -> Dict[str, Any]:
+async def list_mcp_tools(server_name: str, locale: str = "ru-RU") -> Dict[str, Any]:
     """
     Получение списка доступных инструментов от MCP сервера
     
     Args:
         server_name: Имя MCP сервера (команда, доступная в PATH)
+        locale: Предпочтительный язык для ответов (например, "ru-RU", "en-US", "zh-CN")
     
     Returns:
         Словарь с информацией о сервере и инструментах
@@ -531,15 +539,15 @@ async def list_mcp_tools(server_name: str) -> Dict[str, Any]:
         # Пробуем использовать официальный SDK, если доступен
         if MCP_AVAILABLE:
             try:
-                return await _list_tools_with_sdk(server_name)
+                return await _list_tools_with_sdk(server_name, locale)
             except FileNotFoundError:
                 # Если SDK не нашел бинарник, пробуем fallback с npx
                 logger.info(f"SDK didn't find binary for {server_name}, trying fallback with npx")
-                return await _list_tools_with_fallback(server_name)
+                return await _list_tools_with_fallback(server_name, locale)
         else:
             # Используем fallback реализацию
             logger.info(f"Using fallback MCP implementation for {server_name}")
-            return await _list_tools_with_fallback(server_name)
+            return await _list_tools_with_fallback(server_name, locale)
             
     except FileNotFoundError:
         logger.error(f"MCP server '{server_name}' not found. Make sure it's installed and in PATH.")

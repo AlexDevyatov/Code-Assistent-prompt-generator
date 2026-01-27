@@ -13,6 +13,7 @@ router = APIRouter(prefix="/api/mcp", tags=["mcp"])
 
 class MCPListRequest(BaseModel):
     server_name: str = "mcp-server-google-search"
+    locale: Optional[str] = "ru-RU"  # Язык для ответов (ru-RU, en-US, zh-CN и т.д.)
 
 
 @router.post("/list-tools")
@@ -27,9 +28,9 @@ async def list_tools(request: MCPListRequest):
         Информация о сервере и его инструментах
     """
     try:
-        logger.info(f"Listing tools from MCP server: {request.server_name}")
+        logger.info(f"Listing tools from MCP server: {request.server_name} with locale: {request.locale}")
         
-        result = await list_mcp_tools(request.server_name)
+        result = await list_mcp_tools(request.server_name, locale=request.locale or "ru-RU")
         
         return result
         
@@ -39,21 +40,22 @@ async def list_tools(request: MCPListRequest):
 
 
 @router.get("/list-tools/{server_name}")
-async def list_tools_get(server_name: str, summary: bool = False):
+async def list_tools_get(server_name: str, summary: bool = False, locale: str = "ru-RU"):
     """
     GET endpoint для получения списка инструментов
     
     Args:
         server_name: Имя MCP сервера
         summary: Если True, возвращает только краткий список инструментов без полных схем
+        locale: Язык для ответов (ru-RU, en-US, zh-CN и т.д.)
     
     Returns:
         Информация о сервере и его инструментах
     """
     try:
-        logger.info(f"Listing tools from MCP server: {server_name}")
+        logger.info(f"Listing tools from MCP server: {server_name} with locale: {locale}")
         
-        result = await list_mcp_tools(server_name)
+        result = await list_mcp_tools(server_name, locale=locale)
         
         # Если запрошен summary, возвращаем упрощенный формат
         if summary:
