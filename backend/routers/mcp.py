@@ -39,12 +39,13 @@ async def list_tools(request: MCPListRequest):
 
 
 @router.get("/list-tools/{server_name}")
-async def list_tools_get(server_name: str):
+async def list_tools_get(server_name: str, summary: bool = False):
     """
     GET endpoint для получения списка инструментов
     
     Args:
         server_name: Имя MCP сервера
+        summary: Если True, возвращает только краткий список инструментов без полных схем
     
     Returns:
         Информация о сервере и его инструментах
@@ -54,8 +55,36 @@ async def list_tools_get(server_name: str):
         
         result = await list_mcp_tools(server_name)
         
+        # Если запрошен summary, возвращаем упрощенный формат
+        if summary:
+            return {
+                "name": result.get("name"),
+                "tools_count": len(result.get("tools", [])),
+                "tools": [
+                    {
+                        "name": tool.get("name"),
+                        "description": tool.get("description", "")[:200] if tool.get("description") else "No description"
+                    }
+                    for tool in result.get("tools", [])
+                ]
+            }
+        
         return result
         
     except Exception as e:
         logger.error(f"Unexpected error listing MCP tools: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+@router.get("/list-tools/{server_name}/summary")
+async def list_tools_summary(server_name: str):
+    """
+    GET endpoint для получения краткого списка инструментов (без полных схем)
+    
+    Args:
+        server_name: Имя MCP сервера
+    
+    Returns:
+        Краткая информация о сервере и его инструментах
+    """
+    return await list_tools_get(server_name, summary=True)
