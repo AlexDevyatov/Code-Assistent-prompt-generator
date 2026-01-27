@@ -100,7 +100,8 @@ function MCPServer() {
 
         {error && (
           <div className="mcp-server-error">
-            <strong>Ошибка:</strong> {error}
+            <strong>Ошибка:</strong>
+            <pre className="mcp-server-error-text">{error}</pre>
           </div>
         )}
 

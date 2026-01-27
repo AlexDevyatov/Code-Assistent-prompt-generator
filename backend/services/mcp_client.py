@@ -177,9 +177,17 @@ async def list_mcp_tools(server_name: str) -> Dict[str, Any]:
             
     except FileNotFoundError:
         logger.error(f"MCP server '{server_name}' not found. Make sure it's installed and in PATH.")
+        error_msg = (
+            f"Server '{server_name}' not found. Make sure it's installed and available in PATH.\n\n"
+            f"To install MCP servers, you can:\n"
+            f"1. Install via npm: npm install -g @modelcontextprotocol/server-google-search\n"
+            f"2. Or use the MCP server's installation instructions\n"
+            f"3. Make sure the server binary is in your PATH\n\n"
+            f"You can check if it's installed by running: which {server_name}"
+        )
         return {
             "name": server_name,
-            "error": f"Server '{server_name}' not found. Make sure it's installed and available in PATH.",
+            "error": error_msg,
             "tools": []
         }
     except Exception as e:
