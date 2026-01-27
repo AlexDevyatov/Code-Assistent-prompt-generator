@@ -4,7 +4,7 @@ import json
 import asyncio
 import os
 import shutil
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -19,10 +19,63 @@ except ImportError as e:
     logger.warning(f"MCP SDK not available: {IMPORT_ERROR}. Using fallback implementation.")
 
 
+def _resolve_mcp_server_command(server_name: str) -> Optional[str]:
+    """
+    Находит правильное имя команды для MCP сервера, проверяя оригинальное имя
+    и альтернативные варианты.
+    
+    Args:
+        server_name: Исходное имя сервера
+        
+    Returns:
+        Найденное имя команды (или полный путь, если найден) или None, если не найдено
+    """
+    # Сначала проверяем оригинальное имя
+    if os.path.isabs(server_name):
+        if os.path.exists(server_name):
+            return server_name
+    else:
+        resolved = shutil.which(server_name)
+        if resolved:
+            # Возвращаем полный путь для надежности
+            return resolved
+    
+    # Если не найдено, пробуем альтернативные имена
+    alternative_names = []
+    server_lower = server_name.lower()
+    
+    if "google" in server_lower or "search" in server_lower:
+        alternative_names = [
+            "google-search-mcp",
+            "mcp-server-google-search",
+            "google-search"
+        ]
+    elif "filesystem" in server_lower:
+        alternative_names = [
+            "mcp-server-filesystem",
+            "filesystem-mcp"
+        ]
+    
+    # Пробуем найти альтернативные имена
+    for alt_name in alternative_names:
+        alt_resolved = shutil.which(alt_name)
+        if alt_resolved:
+            logger.info(f"Found MCP server with alternative name: {alt_name} (requested: {server_name}) -> {alt_resolved}")
+            # Возвращаем полный путь
+            return alt_resolved
+    
+    return None
+
+
 async def _list_tools_with_sdk(server_name: str) -> Dict[str, Any]:
     """Использование официального MCP SDK для получения инструментов"""
+    # Пытаемся найти правильное имя команды
+    resolved_command = _resolve_mcp_server_command(server_name)
+    if not resolved_command:
+        raise FileNotFoundError(f"MCP server '{server_name}' not found in PATH")
+    
     server_params = StdioServerParameters(
-        command=server_name,
+        command=resolved_command,
         args=[],
         env=None
     )
@@ -53,11 +106,20 @@ async def _list_tools_with_fallback(server_name: str) -> Dict[str, Any]:
     """Fallback реализация через прямое взаимодействие с MCP сервером по JSON-RPC"""
     try:
         # Определяем команду для запуска сервера
-        # Сначала проверяем, доступен ли бинарь напрямую
-        resolved = server_name if os.path.isabs(server_name) else shutil.which(server_name)
+        # Используем вспомогательную функцию для поиска правильного имени
+        resolved_command = _resolve_mcp_server_command(server_name)
+        resolved = None
         npx_args = None
         
-        # Если бинарь не найден, пытаемся использовать npx с соответствующим пакетом
+        if resolved_command:
+            # Функция уже возвращает полный путь, если найден
+            if os.path.exists(resolved_command) or os.path.isabs(resolved_command):
+                resolved = resolved_command
+            else:
+                # Если это имя команды, пробуем найти его
+                resolved = shutil.which(resolved_command)
+        
+        # Если бинарь все еще не найден, пытаемся использовать npx с соответствующим пакетом
         if not resolved:
             # Проверяем, доступен ли npx
             npx_path = shutil.which("npx")
@@ -200,7 +262,12 @@ async def list_mcp_tools(server_name: str) -> Dict[str, Any]:
     try:
         # Пробуем использовать официальный SDK, если доступен
         if MCP_AVAILABLE:
-            return await _list_tools_with_sdk(server_name)
+            try:
+                return await _list_tools_with_sdk(server_name)
+            except FileNotFoundError:
+                # Если SDK не нашел бинарник, пробуем fallback с npx
+                logger.info(f"SDK didn't find binary for {server_name}, trying fallback with npx")
+                return await _list_tools_with_fallback(server_name)
         else:
             # Используем fallback реализацию
             logger.info(f"Using fallback MCP implementation for {server_name}")
