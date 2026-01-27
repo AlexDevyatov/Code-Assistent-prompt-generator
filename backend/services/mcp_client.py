@@ -111,16 +111,25 @@ async def _list_tools_with_fallback(server_name: str) -> Dict[str, Any]:
         resolved = None
         npx_args = None
         
+        logger.info(f"Resolving MCP server '{server_name}': found command = {resolved_command}")
+        
         if resolved_command:
             # Функция уже возвращает полный путь, если найден
-            if os.path.exists(resolved_command) or os.path.isabs(resolved_command):
+            if os.path.exists(resolved_command):
                 resolved = resolved_command
+                logger.info(f"Using resolved binary: {resolved}")
+            elif os.path.isabs(resolved_command):
+                # Если это абсолютный путь, но файл не существует, пробуем найти через which
+                resolved = shutil.which(os.path.basename(resolved_command)) or resolved_command
+                logger.info(f"Using absolute path or which result: {resolved}")
             else:
                 # Если это имя команды, пробуем найти его
                 resolved = shutil.which(resolved_command)
+                logger.info(f"Using which result: {resolved}")
         
         # Если бинарь все еще не найден, пытаемся использовать npx с соответствующим пакетом
         if not resolved:
+            logger.info(f"Binary not found, will use npx fallback for {server_name}")
             # Проверяем, доступен ли npx
             npx_path = shutil.which("npx")
             if not npx_path:
@@ -140,25 +149,52 @@ async def _list_tools_with_fallback(server_name: str) -> Dict[str, Any]:
                 raise FileNotFoundError(f"MCP server '{server_name}' not found in PATH and no npx package available")
 
         # Запускаем MCP сервер как subprocess
+        # Если бинарник найден, но не через npx, пробуем запустить напрямую
+        # Если не получается, используем npx как fallback
+        process = None
+        use_npx_fallback = False
+        
         if npx_args:
             # Используем npx для запуска
-            process = await asyncio.create_subprocess_exec(
-                resolved,
-                *npx_args,
-                stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
+            try:
+                process = await asyncio.create_subprocess_exec(
+                    resolved,
+                    *npx_args,
+                    stdin=asyncio.subprocess.PIPE,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+            except Exception as e:
+                logger.warning(f"Failed to start with npx: {e}")
+                raise
         else:
-            # Используем прямой бинарь
-            process = await asyncio.create_subprocess_exec(
-                resolved,
-                stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
+            # Используем прямой бинарь, но если не получается, пробуем npx
+            try:
+                process = await asyncio.create_subprocess_exec(
+                    resolved,
+                    stdin=asyncio.subprocess.PIPE,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+            except (FileNotFoundError, OSError) as e:
+                # Если прямой запуск не удался, пробуем через npx
+                logger.info(f"Direct binary execution failed for {resolved}, trying npx fallback: {e}")
+                npx_path = shutil.which("npx")
+                if npx_path and ("google" in server_name.lower() or "search" in server_name.lower()):
+                    npm_package = "@mcp-server/google-search-mcp"
+                    resolved = npx_path
+                    npx_args = ["-y", npm_package]
+                    process = await asyncio.create_subprocess_exec(
+                        resolved,
+                        *npx_args,
+                        stdin=asyncio.subprocess.PIPE,
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE
+                    )
+                else:
+                    raise
         
-        if not process.stdin or not process.stdout:
+        if not process or not process.stdin or not process.stdout:
             raise RuntimeError("Failed to create subprocess pipes")
         
         # Отправляем initialize запрос (JSON-RPC 2.0)
