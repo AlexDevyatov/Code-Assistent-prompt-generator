@@ -47,6 +47,37 @@ def _find_npx() -> Optional[str]:
     return None
 
 
+def _get_node_paths() -> list:
+    """
+    Находит пути к node и npm для добавления в PATH
+    
+    Returns:
+        Список путей к директориям с node/npm
+    """
+    paths = []
+    
+    # Ищем node в стандартных местах
+    node_paths = [
+        "/opt/homebrew/bin",      # Homebrew на Apple Silicon
+        "/usr/local/bin",         # Homebrew на Intel Mac / Linux
+        "/usr/bin",               # Системный
+        os.path.expanduser("~/.npm-global/bin"),  # npm global
+    ]
+    
+    for path in node_paths:
+        if os.path.exists(os.path.join(path, "node")):
+            paths.append(path)
+    
+    # Также проверяем через which, если доступен
+    node_path = shutil.which("node")
+    if node_path:
+        node_dir = os.path.dirname(node_path)
+        if node_dir not in paths:
+            paths.insert(0, node_dir)
+    
+    return paths
+
+
 def _resolve_mcp_server_command(server_name: str) -> Optional[str]:
     """
     Находит правильное имя команды для MCP сервера, проверяя оригинальное имя
@@ -198,10 +229,21 @@ async def _list_tools_with_fallback(server_name: str) -> Dict[str, Any]:
         if npx_args:
             # Используем npx для запуска
             try:
-                # Подготавливаем переменные окружения
+                # Подготавливаем переменные окружения с правильным PATH
                 env = dict(os.environ)
                 if "python" in resolved.lower():
                     env["PYTHONUNBUFFERED"] = "1"
+                
+                # Добавляем пути к node в PATH, если их там нет
+                node_paths = _get_node_paths()
+                current_path = env.get("PATH", "").split(os.pathsep)
+                for node_path in node_paths:
+                    if node_path not in current_path:
+                        current_path.insert(0, node_path)
+                env["PATH"] = os.pathsep.join(current_path)
+                
+                logger.info(f"Using npx with PATH: {env['PATH'][:100]}...")
+                
                 # Используем unbuffered режим для stdout/stderr
                 process = await asyncio.create_subprocess_exec(
                     resolved,
@@ -221,6 +263,15 @@ async def _list_tools_with_fallback(server_name: str) -> Dict[str, Any]:
                 env = dict(os.environ)
                 if "python" in resolved.lower():
                     env["PYTHONUNBUFFERED"] = "1"
+                
+                # Добавляем пути к node в PATH, если их там нет (на случай, если бинарник тоже использует node)
+                node_paths = _get_node_paths()
+                current_path = env.get("PATH", "").split(os.pathsep)
+                for node_path in node_paths:
+                    if node_path not in current_path:
+                        current_path.insert(0, node_path)
+                env["PATH"] = os.pathsep.join(current_path)
+                
                 # Используем unbuffered режим для stdout/stderr
                 process = await asyncio.create_subprocess_exec(
                     resolved,
@@ -237,12 +288,23 @@ async def _list_tools_with_fallback(server_name: str) -> Dict[str, Any]:
                     npm_package = "@mcp-server/google-search-mcp"
                     resolved = npx_path
                     npx_args = ["-y", npm_package]
+                    
+                    # Подготавливаем переменные окружения с правильным PATH
+                    env = dict(os.environ)
+                    node_paths = _get_node_paths()
+                    current_path = env.get("PATH", "").split(os.pathsep)
+                    for node_path in node_paths:
+                        if node_path not in current_path:
+                            current_path.insert(0, node_path)
+                    env["PATH"] = os.pathsep.join(current_path)
+                    
                     process = await asyncio.create_subprocess_exec(
                         resolved,
                         *npx_args,
                         stdin=asyncio.subprocess.PIPE,
                         stdout=asyncio.subprocess.PIPE,
-                        stderr=asyncio.subprocess.PIPE
+                        stderr=asyncio.subprocess.PIPE,
+                        env=env
                     )
                 else:
                     raise
