@@ -15,7 +15,7 @@ interface MCPServerInfo {
 }
 
 function MCPServer() {
-  const [serverName, setServerName] = useState('mcp-server-google-search')
+  const [serverName, setServerName] = useState('mcp-server-http')
   const [serverInfo, setServerInfo] = useState<MCPServerInfo | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -83,7 +83,7 @@ function MCPServer() {
                 type="text"
                 value={serverName}
                 onChange={(e) => setServerName(e.target.value)}
-                placeholder="mcp-server-google-search"
+                placeholder="mcp-server-http"
                 className="mcp-server-input"
                 disabled={isLoading}
               />

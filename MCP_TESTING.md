@@ -32,10 +32,10 @@ uvicorn backend.main:app --reload
 # Test POST endpoint
 curl -X POST "http://localhost:8000/api/mcp/list-tools" \
   -H "Content-Type: application/json" \
-  -d '{"server_name": "mcp-server-google-search"}'
+  -d '{"server_name": "mcp-server-http"}'
 
 # Test GET endpoint
-curl -X GET "http://localhost:8000/api/mcp/list-tools/mcp-server-google-search"
+curl -X GET "http://localhost:8000/api/mcp/list-tools/mcp-server-http"
 ```
 
 ### 3. Use the test script
@@ -49,8 +49,8 @@ curl -X GET "http://localhost:8000/api/mcp/list-tools/mcp-server-google-search"
 ### When MCP server is not installed:
 ```json
 {
-  "name": "mcp-server-google-search",
-  "error": "Server 'mcp-server-google-search' not found. Make sure it's installed and available in PATH.\n\nTo install MCP servers, you can:\n1. Install via npm: npm install -g @modelcontextprotocol/server-google-search\n2. Or use the MCP server's installation instructions\n3. Make sure the server binary is in your PATH\n\nYou can check if it's installed by running: which mcp-server-google-search",
+  "name": "mcp-server-http",
+  "error": "Server 'mcp-server-http' not found. Make sure it's installed and available in PATH.\n\nTo install MCP servers, you can:\n1. Install via npm: npm install -g @modelcontextprotocol/server-http\n2. Or use the MCP server's installation instructions\n3. Make sure the server binary is in your PATH\n\nYou can check if it's installed by running: which mcp-server-http",
   "tools": []
 }
 ```
@@ -58,7 +58,7 @@ curl -X GET "http://localhost:8000/api/mcp/list-tools/mcp-server-google-search"
 ### When MCP server is available:
 ```json
 {
-  "name": "mcp-server-google-search",
+  "name": "mcp-server-http",
   "tools": [
     {
       "name": "tool_name",

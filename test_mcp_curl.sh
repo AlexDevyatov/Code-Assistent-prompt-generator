@@ -24,7 +24,7 @@ echo "1. Testing POST /api/mcp/list-tools"
 echo "-----------------------------------"
 response=$(curl -s -X POST "$BASE_URL/api/mcp/list-tools" \
   -H "Content-Type: application/json" \
-  -d '{"server_name": "mcp-server-google-search"}' \
+  -d '{"server_name": "mcp-server-http"}' \
   -w "\n%{http_code}")
 
 http_code=$(echo "$response" | tail -1)
@@ -45,9 +45,9 @@ fi
 echo ""
 
 # Test 2: GET endpoint
-echo "2. Testing GET /api/mcp/list-tools/mcp-server-google-search"
+echo "2. Testing GET /api/mcp/list-tools/mcp-server-http"
 echo "-----------------------------------------------------------"
-response=$(curl -s -X GET "$BASE_URL/api/mcp/list-tools/mcp-server-google-search" -w "\n%{http_code}")
+response=$(curl -s -X GET "$BASE_URL/api/mcp/list-tools/mcp-server-http" -w "\n%{http_code}")
 
 http_code=$(echo "$response" | tail -1)
 body=$(echo "$response" | head -n -1)

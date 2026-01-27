@@ -28,12 +28,12 @@ The MCP server integration has been implemented but requires:
 ```bash
 curl -X POST "http://localhost:8000/api/mcp/list-tools" \
   -H "Content-Type: application/json" \
-  -d '{"server_name": "mcp-server-google-search"}'
+  -d '{"server_name": "mcp-server-http"}'
 ```
 
 2. **Test GET endpoint**:
 ```bash
-curl -X GET "http://localhost:8000/api/mcp/list-tools/mcp-server-google-search"
+curl -X GET "http://localhost:8000/api/mcp/list-tools/mcp-server-http"
 ```
 
 ### Expected Responses
@@ -41,7 +41,7 @@ curl -X GET "http://localhost:8000/api/mcp/list-tools/mcp-server-google-search"
 **When MCP SDK is not available (Python < 3.10)**:
 ```json
 {
-  "name": "mcp-server-google-search",
+  "name": "mcp-server-http",
   "error": "MCP SDK is not available. No module named 'mcp'. Please install MCP package (requires Python 3.10+): pip install mcp",
   "tools": []
 }
@@ -50,8 +50,8 @@ curl -X GET "http://localhost:8000/api/mcp/list-tools/mcp-server-google-search"
 **When MCP server is not found**:
 ```json
 {
-  "name": "mcp-server-google-search",
-  "error": "Server 'mcp-server-google-search' not found. Make sure it's installed and available in PATH.",
+  "name": "mcp-server-http",
+  "error": "Server 'mcp-server-http' not found. Make sure it's installed and available in PATH.",
   "tools": []
 }
 ```
@@ -59,7 +59,7 @@ curl -X GET "http://localhost:8000/api/mcp/list-tools/mcp-server-google-search"
 **When MCP server is available**:
 ```json
 {
-  "name": "mcp-server-google-search",
+  "name": "mcp-server-http",
   "tools": [
     {
       "name": "tool_name",
@@ -87,5 +87,5 @@ The code gracefully handles missing MCP SDK and returns helpful error messages. 
 
 1. Restart the FastAPI server to register new routes
 2. (Optional) Upgrade to Python 3.10+ to enable full MCP functionality
-3. Install MCP server (e.g., `mcp-server-google-search`) if not already installed
+3. Install MCP server (e.g., `mcp-server-http`) if not already installed
 4. Test endpoints using curl or the web interface
