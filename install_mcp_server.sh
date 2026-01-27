@@ -27,6 +27,49 @@ fi
 echo -e "${GREEN}✓ npm is installed${NC}"
 echo ""
 
+# Get npm global bin directory and add to PATH
+NPM_PREFIX=$(npm config get prefix 2>/dev/null || echo "$HOME/.npm-global")
+NPM_BIN_DIR="$NPM_PREFIX/bin"
+
+# Add npm global bin to PATH for current session
+if [[ ":$PATH:" != *":$NPM_BIN_DIR:"* ]]; then
+    export PATH="$NPM_BIN_DIR:$PATH"
+    echo -e "${GREEN}✓ Added npm global bin to PATH for current session${NC}"
+    echo "  Path: $NPM_BIN_DIR"
+    echo ""
+fi
+
+# Check shell and suggest permanent PATH addition
+SHELL_NAME=$(basename "$SHELL" 2>/dev/null || echo "bash")
+SHELL_RC=""
+if [[ "$SHELL_NAME" == "zsh" ]]; then
+    SHELL_RC="$HOME/.zshrc"
+elif [[ "$SHELL_NAME" == "bash" ]]; then
+    SHELL_RC="$HOME/.bashrc"
+fi
+
+# Check if PATH export already exists in shell RC
+if [[ -n "$SHELL_RC" ]] && [[ -f "$SHELL_RC" ]]; then
+    if ! grep -q "npm config get prefix.*bin" "$SHELL_RC" 2>/dev/null; then
+        echo -e "${YELLOW}💡 Для постоянной настройки PATH добавьте в $SHELL_RC:${NC}"
+        echo "  export PATH=\"\$(npm config get prefix)/bin:\$PATH\""
+        echo ""
+        read -p "Добавить автоматически? (y/n): " -n 1 -r
+        echo ""
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            echo "" >> "$SHELL_RC"
+            echo "# Add npm global bin to PATH" >> "$SHELL_RC"
+            echo 'export PATH="$(npm config get prefix)/bin:$PATH"' >> "$SHELL_RC"
+            echo -e "${GREEN}✓ Добавлено в $SHELL_RC${NC}"
+            echo "  Выполните: source $SHELL_RC"
+            echo ""
+        fi
+    else
+        echo -e "${GREEN}✓ PATH уже настроен в $SHELL_RC${NC}"
+        echo ""
+    fi
+fi
+
 # Determine npm package name
 case "$SERVER_NAME" in
     mcp-server-http|mcp_http|http)
