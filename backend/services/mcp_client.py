@@ -19,6 +19,34 @@ except ImportError as e:
     logger.warning(f"MCP SDK not available: {IMPORT_ERROR}. Using fallback implementation.")
 
 
+def _find_npx() -> Optional[str]:
+    """
+    Находит npx в PATH или в стандартных местах
+    
+    Returns:
+        Путь к npx или None, если не найден
+    """
+    # Сначала пробуем найти в PATH
+    npx_path = shutil.which("npx")
+    if npx_path:
+        return npx_path
+    
+    # Если не найден в PATH, пробуем стандартные места
+    standard_paths = [
+        "/opt/homebrew/bin/npx",  # Homebrew на Apple Silicon
+        "/usr/local/bin/npx",      # Homebrew на Intel Mac / Linux
+        "/usr/bin/npx",            # Системный
+        os.path.expanduser("~/.npm-global/bin/npx"),  # npm global
+    ]
+    
+    for path in standard_paths:
+        if os.path.exists(path) and os.access(path, os.X_OK):
+            logger.info(f"Found npx at standard location: {path}")
+            return path
+    
+    return None
+
+
 def _resolve_mcp_server_command(server_name: str) -> Optional[str]:
     """
     Находит правильное имя команды для MCP сервера, проверяя оригинальное имя
@@ -105,6 +133,11 @@ async def _list_tools_with_sdk(server_name: str) -> Dict[str, Any]:
 async def _list_tools_with_fallback(server_name: str) -> Dict[str, Any]:
     """Fallback реализация через прямое взаимодействие с MCP сервером по JSON-RPC"""
     try:
+        # Проверяем доступность npx в начале
+        npx_path = shutil.which("npx")
+        if not npx_path:
+            logger.warning("npx not found in PATH, MCP servers may not work")
+        
         # Определяем команду для запуска сервера
         # Используем вспомогательную функцию для поиска правильного имени
         resolved_command = _resolve_mcp_server_command(server_name)
@@ -129,22 +162,30 @@ async def _list_tools_with_fallback(server_name: str) -> Dict[str, Any]:
         
         # Если бинарь все еще не найден, пытаемся использовать npx с соответствующим пакетом
         if not resolved:
-            logger.info(f"Binary not found, will use npx fallback for {server_name}")
-            # Проверяем, доступен ли npx
-            npx_path = shutil.which("npx")
+            logger.info(f"Binary not found for {server_name}, will use npx fallback")
+            # Проверяем, доступен ли npx (включая стандартные места)
+            npx_path = _find_npx()
             if not npx_path:
-                raise FileNotFoundError(f"Neither MCP server '{server_name}' nor 'npx' found in PATH")
+                # Если npx тоже не найден, это критическая ошибка
+                raise FileNotFoundError(f"Neither MCP server '{server_name}' nor 'npx' found in PATH or standard locations")
             
             # Определяем npm пакет на основе имени сервера
+            npm_package = None
             if "google" in server_name.lower() or "search" in server_name.lower():
                 npm_package = "@mcp-server/google-search-mcp"
+            elif "filesystem" in server_name.lower():
+                npm_package = "@modelcontextprotocol/server-filesystem"
+            else:
+                # Пытаемся угадать пакет из имени
+                server_part = server_name.replace("mcp-server-", "").replace("mcp_", "").replace("mcp-", "")
+                if server_part:
+                    npm_package = f"@mcp-server/{server_part}-mcp"
+            
+            if npm_package:
                 # Используем npx для запуска
                 resolved = npx_path
                 npx_args = ["-y", npm_package]
-            elif "filesystem" in server_name.lower():
-                npm_package = "@modelcontextprotocol/server-filesystem"
-                resolved = npx_path
-                npx_args = ["-y", npm_package]
+                logger.info(f"Using npx to run {npm_package}")
             else:
                 raise FileNotFoundError(f"MCP server '{server_name}' not found in PATH and no npx package available")
 
@@ -179,7 +220,7 @@ async def _list_tools_with_fallback(server_name: str) -> Dict[str, Any]:
             except (FileNotFoundError, OSError) as e:
                 # Если прямой запуск не удался, пробуем через npx
                 logger.info(f"Direct binary execution failed for {resolved}, trying npx fallback: {e}")
-                npx_path = shutil.which("npx")
+                npx_path = _find_npx()
                 if npx_path and ("google" in server_name.lower() or "search" in server_name.lower()):
                     npm_package = "@mcp-server/google-search-mcp"
                     resolved = npx_path
