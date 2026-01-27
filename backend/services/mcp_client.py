@@ -198,6 +198,10 @@ async def _list_tools_with_fallback(server_name: str) -> Dict[str, Any]:
         if npx_args:
             # Используем npx для запуска
             try:
+                # Подготавливаем переменные окружения
+                env = dict(os.environ)
+                if "python" in resolved.lower():
+                    env["PYTHONUNBUFFERED"] = "1"
                 # Используем unbuffered режим для stdout/stderr
                 process = await asyncio.create_subprocess_exec(
                     resolved,
@@ -205,7 +209,7 @@ async def _list_tools_with_fallback(server_name: str) -> Dict[str, Any]:
                     stdin=asyncio.subprocess.PIPE,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
-                    env={**os.environ, "PYTHONUNBUFFERED": "1"} if "python" in resolved.lower() else os.environ
+                    env=env
                 )
             except Exception as e:
                 logger.warning(f"Failed to start with npx: {e}")
@@ -213,13 +217,17 @@ async def _list_tools_with_fallback(server_name: str) -> Dict[str, Any]:
         else:
             # Используем прямой бинарь, но если не получается, пробуем npx
             try:
+                # Подготавливаем переменные окружения
+                env = dict(os.environ)
+                if "python" in resolved.lower():
+                    env["PYTHONUNBUFFERED"] = "1"
                 # Используем unbuffered режим для stdout/stderr
                 process = await asyncio.create_subprocess_exec(
                     resolved,
                     stdin=asyncio.subprocess.PIPE,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
-                    env={**os.environ, "PYTHONUNBUFFERED": "1"} if "python" in resolved.lower() else os.environ
+                    env=env
                 )
             except (FileNotFoundError, OSError) as e:
                 # Если прямой запуск не удался, пробуем через npx
