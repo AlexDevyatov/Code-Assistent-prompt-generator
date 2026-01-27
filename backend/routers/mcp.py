@@ -12,7 +12,7 @@ router = APIRouter(prefix="/api/mcp", tags=["mcp"])
 
 
 class MCPListRequest(BaseModel):
-    server_name: str = "mcp-server-http"
+    server_name: str = "mcp-server-google-search"
 
 
 @router.post("/list-tools")

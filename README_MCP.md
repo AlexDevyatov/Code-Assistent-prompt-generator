@@ -9,10 +9,14 @@ This project includes integration with Model Context Protocol (MCP) servers, all
 Use the provided installation script:
 
 ```bash
-./install_mcp_server.sh
+# Install Google Search server (recommended)
+./install_mcp_server.sh mcp-server-google-search
+
+# Or install filesystem server
+./install_mcp_server.sh mcp-server-filesystem
 ```
 
-This will install `mcp-server-http` by default. To install a different server:
+**Note:** There is no official `mcp-server-http` package. The default has been changed to use available servers.
 
 ```bash
 ./install_mcp_server.sh mcp-server-google-search
@@ -28,15 +32,16 @@ npm run dev
 
 Open your browser and navigate to:
 - **Web Interface**: http://localhost:8000/mcp-server
-- **API Endpoint**: http://localhost:8000/api/mcp/list-tools/mcp-server-http
+- **API Endpoint**: http://localhost:8000/api/mcp/list-tools/mcp-server-google-search
 
 ## Available MCP Servers
 
 The following MCP servers are supported:
 
-- **mcp-server-http** - HTTP client tools (default)
-- **mcp-server-google-search** - Google Search integration
-- **mcp-server-filesystem** - File system operations
+- **mcp-server-google-search** - Google Search integration (`@mcp-server/google-search-mcp`)
+- **mcp-server-filesystem** - File system operations (`@modelcontextprotocol/server-filesystem`)
+
+**Note:** There is no official `mcp-server-http` package. You can create your own MCP server using `@modelcontextprotocol/sdk` or use other available servers.
 
 Install any of them using:
 ```bash

@@ -29,20 +29,36 @@ echo ""
 
 # Determine npm package name
 case "$SERVER_NAME" in
-    mcp-server-http|mcp_http)
-        NPM_PACKAGE="@modelcontextprotocol/server-http"
+    mcp-server-http|mcp_http|http)
+        echo -e "${YELLOW}Note: There is no official 'mcp-server-http' package.${NC}"
+        echo "MCP servers are typically custom implementations or use different names."
+        echo ""
+        echo "Available options:"
+        echo "  1. Use a different MCP server (e.g., google-search)"
+        echo "  2. Create your own MCP server using @modelcontextprotocol/sdk"
+        echo "  3. Use a server that provides HTTP tools"
+        echo ""
+        echo "For example, try:"
+        echo "  ./install_mcp_server.sh mcp-server-google-search"
+        exit 1
         ;;
-    mcp-server-google-search|mcp_google_search)
-        NPM_PACKAGE="@modelcontextprotocol/server-google-search"
+    mcp-server-google-search|mcp_google_search|google-search)
+        NPM_PACKAGE="@mcp-server/google-search-mcp"
         ;;
-    mcp-server-filesystem|mcp_filesystem)
+    mcp-server-filesystem|mcp_filesystem|filesystem)
         NPM_PACKAGE="@modelcontextprotocol/server-filesystem"
         ;;
     *)
         # Try to guess from server name
         SERVER_PART=$(echo "$SERVER_NAME" | sed 's/^mcp[-_]server[-_]//' | sed 's/^mcp[-_]//')
-        NPM_PACKAGE="@modelcontextprotocol/server-${SERVER_PART}"
-        echo -e "${YELLOW}Warning: Unknown server name, trying package: $NPM_PACKAGE${NC}"
+        # Try common patterns
+        if [[ "$SERVER_PART" == "google-search" ]] || [[ "$SERVER_PART" == "google" ]]; then
+            NPM_PACKAGE="@mcp-server/google-search-mcp"
+        else
+            NPM_PACKAGE="@mcp-server/${SERVER_PART}-mcp"
+            echo -e "${YELLOW}Warning: Unknown server name, trying package: $NPM_PACKAGE${NC}"
+            echo "If this fails, check available packages at: https://www.npmjs.com/search?q=mcp-server"
+        fi
         ;;
 esac
 

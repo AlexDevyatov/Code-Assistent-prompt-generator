@@ -180,18 +180,26 @@ async def list_mcp_tools(server_name: str) -> Dict[str, Any]:
         
         # Определяем npm пакет на основе имени сервера
         npm_package = None
-        if "http" in server_name.lower():
-            npm_package = "@modelcontextprotocol/server-http"
-        elif "google" in server_name.lower() or "search" in server_name.lower():
-            npm_package = "@modelcontextprotocol/server-google-search"
-        elif "filesystem" in server_name.lower():
+        server_lower = server_name.lower()
+        if "http" in server_lower:
+            npm_package = None  # No official http server package
+            install_cmd = "Create your own using @modelcontextprotocol/sdk or use a different server"
+        elif "google" in server_lower or "search" in server_lower:
+            npm_package = "@mcp-server/google-search-mcp"
+        elif "filesystem" in server_lower:
             npm_package = "@modelcontextprotocol/server-filesystem"
         else:
             # Пытаемся угадать из имени сервера
-            server_part = server_name.replace("mcp-server-", "").replace("mcp_", "")
-            npm_package = f"@modelcontextprotocol/server-{server_part}"
+            server_part = server_name.replace("mcp-server-", "").replace("mcp_", "").replace("mcp-", "")
+            if server_part:
+                npm_package = f"@mcp-server/{server_part}-mcp"
+            else:
+                npm_package = None
         
-        install_cmd = f"npm install -g {npm_package}" if npm_package else "npm install -g @modelcontextprotocol/server-<name>"
+        if npm_package:
+            install_cmd = f"npm install -g {npm_package}"
+        else:
+            install_cmd = "Check available packages at https://www.npmjs.com/search?q=mcp-server or create your own using @modelcontextprotocol/sdk"
         
         error_msg = (
             f"Server '{server_name}' not found. Make sure it's installed and available in PATH.\n\n"
