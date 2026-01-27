@@ -72,20 +72,51 @@ curl -X GET "http://localhost:8000/api/mcp/list-tools/mcp-server-http"
 
 ## Installation
 
-### For Python 3.10+
+### Installing MCP Server
 
-If you upgrade to Python 3.10+, install MCP SDK:
+#### Quick Install (Recommended)
+
+Use the provided installation script:
+
+```bash
+# Install default server (mcp-server-http)
+./install_mcp_server.sh
+
+# Or specify a different server
+./install_mcp_server.sh mcp-server-google-search
+./install_mcp_server.sh mcp-server-filesystem
+```
+
+#### Manual Installation
+
+Install MCP servers via npm:
+
+```bash
+# Install mcp-server-http (default)
+npm install -g @modelcontextprotocol/server-http
+
+# Or other servers
+npm install -g @modelcontextprotocol/server-google-search
+npm install -g @modelcontextprotocol/server-filesystem
+```
+
+**Note:** Make sure Node.js and npm are installed. If you encounter permission errors on Linux/Mac, you may need to use `sudo`.
+
+### Python MCP SDK (Optional)
+
+#### For Python 3.10+
+
+If you upgrade to Python 3.10+, you can install the official MCP SDK for better performance:
 ```bash
 pip install mcp
 ```
 
-### For Python 3.9 (Current)
+#### For Python 3.9 (Current)
 
-The code gracefully handles missing MCP SDK and returns helpful error messages. To use MCP features, upgrade to Python 3.10+.
+The code gracefully handles missing MCP SDK and uses a fallback implementation. The fallback works perfectly fine, but upgrading to Python 3.10+ enables the official SDK.
 
 ## Next Steps
 
-1. Restart the FastAPI server to register new routes
-2. (Optional) Upgrade to Python 3.10+ to enable full MCP functionality
-3. Install MCP server (e.g., `mcp-server-http`) if not already installed
-4. Test endpoints using curl or the web interface
+1. **Install MCP server** using the script: `./install_mcp_server.sh`
+2. **Restart the FastAPI server** to register new routes
+3. **Test endpoints** using curl or the web interface at `/mcp-server`

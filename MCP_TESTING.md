@@ -90,8 +90,21 @@ You should see:
 - Error handling is in place
 - Frontend component is ready
 
+## Installation
+
+Before testing, make sure the MCP server is installed:
+
+```bash
+# Quick install using the script
+./install_mcp_server.sh
+
+# Or manually
+npm install -g @modelcontextprotocol/server-http
+```
+
 ## Next Steps
 
-1. **Restart the server** to register new routes
-2. Run the test script: `./test_mcp_curl.sh`
-3. Test via web interface at `/mcp-server`
+1. **Install MCP server** (if not already installed): `./install_mcp_server.sh`
+2. **Restart the server** to register new routes
+3. Run the test script: `./test_mcp_curl.sh`
+4. Test via web interface at `/mcp-server`
