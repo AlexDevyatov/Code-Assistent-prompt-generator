@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.config import STATIC_DIR
-from backend.routers import chat, health, llama, compression, summaries
+from backend.routers import chat, health, llama, compression, summaries, mcp
 from backend.services.summaries_db import init_db
 
 # Настройка логирования
@@ -32,6 +32,7 @@ app.include_router(health.router)
 app.include_router(llama.router)
 app.include_router(compression.router)
 app.include_router(summaries.router)
+app.include_router(mcp.router)
 
 
 @app.on_event("startup")

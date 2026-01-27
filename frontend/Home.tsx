@@ -50,6 +50,12 @@ function Home() {
               <p>Тестирование механизма сжатия истории: каждые 10 сообщений создаётся суммаризация для экономии токенов</p>
             </div>
           </Link>
+          <Link to="/mcp-server" className="home-link">
+            <div className="home-link-card">
+              <h2>MCP Server Tools</h2>
+              <p>Подключение к MCP серверу и просмотр доступных инструментов</p>
+            </div>
+          </Link>
         </div>
       </div>
     </div>

@@ -1,0 +1,243 @@
+.mcp-server {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.mcp-server-container {
+  max-width: 1000px;
+  margin: 0 auto;
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 2rem;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+}
+
+.mcp-server-header {
+  margin-bottom: 2rem;
+  text-align: center;
+}
+
+.mcp-server-back-link {
+  display: inline-block;
+  color: #667eea;
+  text-decoration: none;
+  margin-bottom: 1rem;
+  font-weight: 500;
+  transition: color 0.3s ease;
+}
+
+.mcp-server-back-link:hover {
+  color: #764ba2;
+}
+
+.mcp-server-title {
+  font-size: 2.5rem;
+  color: #333;
+  margin-bottom: 0.5rem;
+  font-weight: 700;
+}
+
+.mcp-server-subtitle {
+  font-size: 1.1rem;
+  color: #666;
+  margin-bottom: 0;
+}
+
+.mcp-server-form {
+  margin-bottom: 2rem;
+}
+
+.mcp-server-input-group {
+  margin-bottom: 1rem;
+}
+
+.mcp-server-label {
+  display: block;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 0.5rem;
+}
+
+.mcp-server-input-wrapper {
+  display: flex;
+  gap: 1rem;
+  align-items: stretch;
+}
+
+.mcp-server-input {
+  flex: 1;
+  padding: 0.75rem 1rem;
+  font-size: 1rem;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  transition: border-color 0.3s ease;
+}
+
+.mcp-server-input:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.mcp-server-input:disabled {
+  background-color: #f5f5f5;
+  cursor: not-allowed;
+}
+
+.mcp-server-button {
+  padding: 0.75rem 2rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #ffffff;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.mcp-server-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+}
+
+.mcp-server-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.mcp-server-error {
+  padding: 1rem;
+  background-color: #fee;
+  border: 2px solid #fcc;
+  border-radius: 8px;
+  color: #c33;
+  margin-bottom: 1rem;
+}
+
+.mcp-server-loading {
+  text-align: center;
+  padding: 2rem;
+}
+
+.mcp-server-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #667eea;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 1rem;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.mcp-server-results {
+  margin-top: 2rem;
+}
+
+.mcp-server-info {
+  margin-bottom: 2rem;
+  padding-bottom: 1rem;
+  border-bottom: 2px solid #e0e0e0;
+}
+
+.mcp-server-info h2 {
+  font-size: 1.75rem;
+  color: #333;
+  margin-bottom: 0.5rem;
+}
+
+.mcp-server-tools-count {
+  font-size: 1rem;
+  color: #666;
+  margin: 0;
+}
+
+.mcp-server-empty {
+  text-align: center;
+  padding: 2rem;
+  color: #999;
+}
+
+.mcp-server-tools {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.mcp-server-tool-card {
+  background: #f8f9fa;
+  border: 2px solid #e0e0e0;
+  border-radius: 12px;
+  padding: 1.5rem;
+  transition: all 0.3s ease;
+}
+
+.mcp-server-tool-card:hover {
+  border-color: #667eea;
+  box-shadow: 0 5px 15px rgba(102, 126, 234, 0.1);
+}
+
+.mcp-server-tool-name {
+  font-size: 1.5rem;
+  color: #333;
+  margin-bottom: 0.75rem;
+  font-weight: 600;
+}
+
+.mcp-server-tool-description {
+  font-size: 1rem;
+  color: #666;
+  line-height: 1.6;
+  margin-bottom: 1rem;
+}
+
+.mcp-server-tool-schema {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e0e0e0;
+}
+
+.mcp-server-tool-schema strong {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: #333;
+}
+
+.mcp-server-schema-code {
+  background: #ffffff;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  padding: 1rem;
+  font-size: 0.875rem;
+  overflow-x: auto;
+  color: #333;
+  margin: 0;
+}
+
+@media (max-width: 768px) {
+  .mcp-server {
+    padding: 16px;
+  }
+
+  .mcp-server-container {
+    padding: 1.5rem;
+  }
+
+  .mcp-server-title {
+    font-size: 2rem;
+  }
+
+  .mcp-server-input-wrapper {
+    flex-direction: column;
+  }
+
+  .mcp-server-button {
+    width: 100%;
+  }
+}

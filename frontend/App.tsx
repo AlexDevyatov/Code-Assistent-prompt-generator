@@ -7,6 +7,7 @@ import TemperatureComparison from './TemperatureComparison'
 import ModelComparison from './ModelComparison'
 import TokenComparison from './TokenComparison'
 import CompressionTest from './CompressionTest'
+import MCPServer from './MCPServer'
 
 function App() {
   return (
@@ -20,6 +21,7 @@ function App() {
         <Route path="/model-comparison" element={<ModelComparison />} />
         <Route path="/token-comparison" element={<TokenComparison />} />
         <Route path="/compression" element={<CompressionTest />} />
+        <Route path="/mcp-server" element={<MCPServer />} />
       </Routes>
     </BrowserRouter>
   )
