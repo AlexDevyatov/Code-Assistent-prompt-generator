@@ -1,85 +1,100 @@
-# MCP Server Integration - Quick Start
+# Интеграция MCP серверов - Быстрый старт
 
-This project includes integration with Model Context Protocol (MCP) servers, allowing you to connect to and list tools from various MCP servers.
+Этот проект включает интеграцию с серверами Model Context Protocol (MCP), позволяя подключаться к различным MCP серверам и просматривать доступные инструменты.
 
-## Quick Installation
+## Быстрая установка
 
-### 1. Install MCP Server
+### 1. Установка MCP сервера
 
-Use the provided installation script:
+Используйте предоставленный скрипт установки:
 
 ```bash
-# Install Google Search server (recommended)
+# Установить Google Search сервер (рекомендуется)
 ./install_mcp_server.sh mcp-server-google-search
 
-# Or install filesystem server
+# Или установить filesystem сервер
 ./install_mcp_server.sh mcp-server-filesystem
 ```
 
-**Note:** There is no official `mcp-server-http` package. The default has been changed to use available servers.
+**Примечание:** Официального пакета `mcp-server-http` не существует. По умолчанию используется `mcp-server-google-search`.
+
+Скрипт установки автоматически:
+- Установит пакет через npm
+- Добавит npm global bin в PATH для текущей сессии
+- Покажет инструкции для постоянной настройки PATH
+
+### 2. Настройка PATH (опционально, для постоянной работы)
+
+Для постоянной настройки добавьте в `~/.zshrc` (или `~/.bashrc`):
 
 ```bash
-./install_mcp_server.sh mcp-server-google-search
+export PATH="$(npm config get prefix)/bin:$PATH"
 ```
 
-### 2. Restart the Application
+Или выполните:
+```bash
+echo 'export PATH="$(npm config get prefix)/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc
+```
+
+### 3. Перезапуск приложения
 
 ```bash
 npm run dev
 ```
 
-### 3. Access the MCP Interface
+### 4. Доступ к MCP интерфейсу
 
-Open your browser and navigate to:
-- **Web Interface**: http://localhost:8000/mcp-server
+Откройте браузер и перейдите по адресу:
+- **Веб-интерфейс**: http://localhost:8000/mcp-server
 - **API Endpoint**: http://localhost:8000/api/mcp/list-tools/mcp-server-google-search
 
-## Available MCP Servers
+## Доступные MCP серверы
 
-The following MCP servers are supported:
+Поддерживаются следующие MCP серверы:
 
-- **mcp-server-google-search** - Google Search integration (`@mcp-server/google-search-mcp`)
-- **mcp-server-filesystem** - File system operations (`@modelcontextprotocol/server-filesystem`)
+- **mcp-server-google-search** - Интеграция с Google Search (`@mcp-server/google-search-mcp`)
+- **mcp-server-filesystem** - Операции с файловой системой (`@modelcontextprotocol/server-filesystem`)
 
-**Note:** There is no official `mcp-server-http` package. You can create your own MCP server using `@modelcontextprotocol/sdk` or use other available servers.
+**Примечание:** Официального пакета `mcp-server-http` не существует. Вы можете создать свой MCP сервер используя `@modelcontextprotocol/sdk` или использовать другие доступные серверы.
 
-Install any of them using:
+Установка любого из них:
 ```bash
-./install_mcp_server.sh <server-name>
+./install_mcp_server.sh <имя-сервера>
 ```
 
-## API Usage
+## Использование API
 
-### List Tools from MCP Server
+### Получение списка инструментов от MCP сервера
 
-**POST Request:**
+**POST запрос:**
 ```bash
 curl -X POST "http://localhost:8000/api/mcp/list-tools" \
   -H "Content-Type: application/json" \
-  -d '{"server_name": "mcp-server-http"}'
+  -d '{"server_name": "mcp-server-google-search"}'
 ```
 
-**GET Request:**
+**GET запрос:**
 ```bash
-curl -X GET "http://localhost:8000/api/mcp/list-tools/mcp-server-http"
+curl -X GET "http://localhost:8000/api/mcp/list-tools/mcp-server-google-search"
 ```
 
-### Response Format
+### Формат ответа
 
-**Success:**
+**Успешный ответ:**
 ```json
 {
-  "name": "mcp-server-http",
+  "name": "mcp-server-google-search",
   "tools": [
     {
-      "name": "fetch_url",
-      "description": "Fetch content from a URL",
+      "name": "google_search",
+      "description": "Выполнить поиск в Google",
       "inputSchema": {
         "type": "object",
         "properties": {
-          "url": {
+          "query": {
             "type": "string",
-            "description": "The URL to fetch"
+            "description": "Поисковый запрос"
           }
         }
       }
@@ -88,68 +103,140 @@ curl -X GET "http://localhost:8000/api/mcp/list-tools/mcp-server-http"
 }
 ```
 
-**Error (Server Not Found):**
+**Ошибка (сервер не найден):**
 ```json
 {
-  "name": "mcp-server-http",
-  "error": "Server 'mcp-server-http' not found...",
+  "name": "mcp-server-google-search",
+  "error": "Server 'mcp-server-google-search' not found. Make sure it's installed and available in PATH.\n\nTo install MCP servers, you can:\n1. Install via npm: npm install -g @mcp-server/google-search-mcp\n2. Or use npx to run without installation: npx -y @mcp-server/google-search-mcp\n...",
   "tools": []
 }
 ```
 
-## Troubleshooting
+## Автоматическая поддержка npx
 
-### Server Not Found
+Приложение автоматически использует `npx` для запуска MCP серверов, если бинарник не найден в PATH. Это означает, что даже если пакет установлен, но бинарник недоступен напрямую, приложение попытается запустить сервер через `npx -y <package-name>`.
 
-If you get a "Server not found" error:
+## Устранение неполадок
 
-1. **Check if server is installed:**
+### Сервер не найден
+
+Если вы получаете ошибку "Server not found":
+
+1. **Проверьте, установлен ли сервер:**
    ```bash
-   which mcp-server-http
+   which mcp-server-google-search
    ```
 
-2. **Install the server:**
+2. **Установите сервер:**
    ```bash
-   ./install_mcp_server.sh
+   ./install_mcp_server.sh mcp-server-google-search
    ```
 
-3. **Verify npm global bin is in PATH:**
+3. **Проверьте, что npm global bin в PATH:**
    ```bash
    npm config get prefix
    export PATH="$(npm config get prefix)/bin:$PATH"
    ```
 
-### Routes Not Found (404/405)
+4. **Проверьте, доступен ли npx:**
+   ```bash
+   which npx
+   ```
+   
+   Приложение автоматически использует npx, если бинарник не найден.
 
-If API endpoints return 404 or 405:
+### Роуты не найдены (404/405)
 
-1. **Restart the server:**
+Если API endpoints возвращают 404 или 405:
+
+1. **Перезапустите сервер:**
    ```bash
    npm run dev
    ```
 
-2. **Verify routes are registered:**
+2. **Проверьте, что роуты зарегистрированы:**
    ```bash
    curl -s "http://localhost:8000/openapi.json" | python3 -m json.tool | grep mcp
    ```
 
-## Documentation
+   Должны быть видны:
+   - `/api/mcp/list-tools`
+   - `/api/mcp/list-tools/{server_name}`
 
-- **MCP_SETUP.md** - Detailed setup and configuration
-- **MCP_TESTING.md** - Testing guide and examples
-- **test_mcp_curl.sh** - Automated testing script
+### Проблемы с npx
 
-## Requirements
+Если npx не работает:
 
-- **Node.js** and **npm** (for installing MCP servers)
-- **Python 3.9+** (Python 3.10+ recommended for MCP SDK)
-- **FastAPI** server running
+1. **Проверьте установку Node.js:**
+   ```bash
+   node --version
+   npm --version
+   ```
 
-## Features
+2. **Установите/обновите Node.js:**
+   - macOS: `brew install node`
+   - Linux: следуйте инструкциям на https://nodejs.org/
 
-✅ Automatic fallback implementation (works without MCP SDK)  
-✅ Support for multiple MCP servers  
-✅ Web interface for browsing tools  
-✅ REST API for programmatic access  
-✅ Detailed error messages with installation instructions  
-✅ Installation script for easy setup  
+## Документация
+
+- **MCP_SETUP.md** - Подробная настройка и конфигурация
+- **MCP_TESTING.md** - Руководство по тестированию и примеры
+- **test_mcp_curl.sh** - Скрипт для автоматического тестирования
+
+## Требования
+
+- **Node.js** и **npm** (для установки MCP серверов)
+- **Python 3.9+** (Python 3.10+ рекомендуется для MCP SDK)
+- **FastAPI** сервер должен быть запущен
+
+## Возможности
+
+✅ Автоматическая fallback реализация (работает без MCP SDK)  
+✅ Поддержка нескольких MCP серверов  
+✅ Веб-интерфейс для просмотра инструментов  
+✅ REST API для программного доступа  
+✅ Подробные сообщения об ошибках с инструкциями по установке  
+✅ Скрипт установки для простой настройки  
+✅ Автоматическое использование npx, если бинарник не найден  
+✅ Автоматическое добавление npm global bin в PATH  
+
+## Примеры использования
+
+### Через веб-интерфейс
+
+1. Откройте http://localhost:8000/mcp-server
+2. Введите имя сервера (например, `mcp-server-google-search`)
+3. Нажмите "Подключиться"
+4. Просмотрите список доступных инструментов
+
+### Через API
+
+```bash
+# Получить список инструментов
+curl -X GET "http://localhost:8000/api/mcp/list-tools/mcp-server-google-search" | python3 -m json.tool
+
+# Использовать тестовый скрипт
+./test_mcp_curl.sh
+```
+
+## Технические детали
+
+### Как это работает
+
+1. Приложение сначала пытается найти бинарник MCP сервера в PATH
+2. Если бинарник не найден, автоматически используется `npx -y <package-name>`
+3. Подключение к серверу происходит через stdio (стандартный ввод/вывод)
+4. Используется JSON-RPC 2.0 протокол для общения с сервером
+5. Если MCP SDK недоступен (Python < 3.10), используется fallback реализация
+
+### Поддерживаемые протоколы
+
+- **stdio** - Локальное подключение через стандартный ввод/вывод
+- **npx** - Автоматический запуск через npx, если бинарник не найден
+
+## Дополнительная информация
+
+Для получения дополнительной информации о Model Context Protocol:
+- Официальный сайт: https://modelcontextprotocol.io/
+- Документация: https://modelcontextprotocol.io/docs
+- Репозиторий серверов: https://github.com/modelcontextprotocol/servers
