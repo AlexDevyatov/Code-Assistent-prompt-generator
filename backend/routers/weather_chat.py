@@ -5,8 +5,9 @@ from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from backend.services.mcp_client import call_mcp_tool, list_mcp_tools
+from backend.services.mcp_client import call_mcp_tool, list_mcp_tools, _call_mcp_via_http
 from backend.services.deepseek_api import call_deepseek_api
+from backend.config import MCP_WEATHER_SERVER_URL, MCP_USE_HTTP
 
 logger = logging.getLogger(__name__)
 
@@ -144,12 +145,6 @@ async def _get_weather_data(intent: Dict[str, Any]) -> Optional[str]:
         Строка с данными о погоде или None в случае ошибки
     """
     try:
-        # Сначала проверяем доступность сервера
-        server_info = await list_mcp_tools(WEATHER_MCP_SERVER)
-        if "error" in server_info:
-            logger.error(f"MCP Weather server error: {server_info['error']}")
-            return None
-        
         # Определяем аргументы для вызова инструмента
         tool_name = None
         arguments = {}
@@ -167,7 +162,20 @@ async def _get_weather_data(intent: Dict[str, Any]) -> Optional[str]:
         
         # Вызываем инструмент MCP - это обязательно для запросов о погоде
         logger.info(f"Calling MCP tool {tool_name} with arguments: {arguments}")
-        result = await call_mcp_tool(WEATHER_MCP_SERVER, tool_name, arguments)
+        
+        # Используем HTTP подключение, если настроено
+        if MCP_USE_HTTP:
+            logger.info(f"🌐 Using HTTP connection to MCP server: {MCP_WEATHER_SERVER_URL}")
+            result = await call_mcp_tool(WEATHER_MCP_SERVER, tool_name, arguments)
+        else:
+            # Используем локальное подключение через stdio
+            logger.info(f"🔧 Using local stdio connection to MCP server: {WEATHER_MCP_SERVER}")
+            server_info = await list_mcp_tools(WEATHER_MCP_SERVER)
+            if "error" in server_info:
+                logger.error(f"MCP Weather server error: {server_info['error']}")
+                return None
+            
+            result = await call_mcp_tool(WEATHER_MCP_SERVER, tool_name, arguments)
         
         # Обрабатываем результат
         if result.get("isError"):

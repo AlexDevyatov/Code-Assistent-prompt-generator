@@ -5,6 +5,15 @@ import asyncio
 import os
 import shutil
 from typing import Dict, Any, Optional
+import httpx
+
+# Импортируем конфигурацию для HTTP подключения
+try:
+    from backend.config import MCP_WEATHER_SERVER_URL, MCP_USE_HTTP
+except ImportError:
+    # Если конфигурация не доступна, используем значения по умолчанию
+    MCP_WEATHER_SERVER_URL = os.getenv("MCP_WEATHER_SERVER_URL", "http://185.28.85.26:8001")
+    MCP_USE_HTTP = os.getenv("MCP_USE_HTTP", "true").lower() == "true"
 
 logger = logging.getLogger(__name__)
 
@@ -544,18 +553,101 @@ async def _list_tools_with_fallback(server_name: str, locale: str = "ru-RU") -> 
         raise RuntimeError(f"Error communicating with MCP server: {e}")
 
 
+async def _call_mcp_via_http(server_url: str, method: str, params: Dict[str, Any] = None, request_id: int = 1) -> Dict[str, Any]:
+    """
+    Вызов MCP метода через HTTP
+    
+    Args:
+        server_url: URL MCP сервера
+        method: Имя метода (например, "tools/list", "tools/call")
+        params: Параметры метода
+        request_id: ID запроса
+    
+    Returns:
+        Результат вызова
+    """
+    try:
+        jsonrpc_request = {
+            "jsonrpc": "2.0",
+            "id": request_id,
+            "method": method,
+            "params": params or {}
+        }
+        
+        logger.info(f"🌐 Calling MCP via HTTP: {server_url}, method: {method}, params: {params}")
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                server_url,
+                json=jsonrpc_request,
+                headers={"Content-Type": "application/json"}
+            )
+            response.raise_for_status()
+            result = response.json()
+            
+            logger.debug(f"MCP HTTP response: {result}")
+            
+            if "error" in result:
+                error_info = result["error"]
+                error_msg = error_info.get("message", str(error_info))
+                logger.error(f"MCP server error: {error_msg}")
+                raise RuntimeError(f"MCP server error: {error_msg}")
+            
+            if "result" not in result:
+                logger.warning(f"No 'result' field in MCP response: {result}")
+                return {}
+            
+            return result.get("result", {})
+            
+    except httpx.HTTPStatusError as e:
+        logger.error(f"HTTP status error calling MCP server {server_url}: {e.response.status_code} - {e.response.text}")
+        raise RuntimeError(f"Failed to connect to MCP server: HTTP {e.response.status_code}")
+    except httpx.HTTPError as e:
+        logger.error(f"HTTP error calling MCP server {server_url}: {e}")
+        raise RuntimeError(f"Failed to connect to MCP server: {e}")
+    except json.JSONDecodeError as e:
+        logger.error(f"Invalid JSON response from MCP server: {e}")
+        raise RuntimeError(f"Invalid JSON response from MCP server: {e}")
+    except Exception as e:
+        logger.error(f"Error calling MCP via HTTP: {e}")
+        raise
+
+
 async def list_mcp_tools(server_name: str, locale: str = "ru-RU") -> Dict[str, Any]:
     """
     Получение списка доступных инструментов от MCP сервера
     
     Args:
-        server_name: Имя MCP сервера (команда, доступная в PATH)
+        server_name: Имя MCP сервера (команда, доступная в PATH) или "mcp-weather" для HTTP
         locale: Предпочтительный язык для ответов (например, "ru-RU", "en-US", "zh-CN")
     
     Returns:
         Словарь с информацией о сервере и инструментах
     """
     try:
+        # Если это weather сервер и используется HTTP, подключаемся через HTTP
+        if server_name == "mcp-weather" and MCP_USE_HTTP:
+            logger.info(f"Using HTTP connection to list tools from {MCP_WEATHER_SERVER_URL}")
+            try:
+                result = await _call_mcp_via_http(
+                    MCP_WEATHER_SERVER_URL,
+                    "tools/list",
+                    {},
+                    request_id=1
+                )
+                server_info = {
+                    "name": server_name,
+                    "tools": result.get("tools", [])
+                }
+                return server_info
+            except Exception as e:
+                logger.error(f"Error listing tools via HTTP: {e}")
+                return {
+                    "name": server_name,
+                    "error": str(e),
+                    "tools": []
+                }
+        
         # Пробуем использовать официальный SDK, если доступен
         if MCP_AVAILABLE:
             try:
@@ -776,7 +868,7 @@ async def call_mcp_tool(server_name: str, tool_name: str, arguments: Dict[str, A
     Вызов инструмента MCP сервера
     
     Args:
-        server_name: Имя MCP сервера
+        server_name: Имя MCP сервера или "mcp-weather" для HTTP
         tool_name: Имя инструмента для вызова
         arguments: Аргументы для инструмента
         locale: Предпочтительный язык для ответов
@@ -785,6 +877,28 @@ async def call_mcp_tool(server_name: str, tool_name: str, arguments: Dict[str, A
         Результат вызова инструмента
     """
     try:
+        # Если это weather сервер и используется HTTP, подключаемся через HTTP
+        if server_name == "mcp-weather" and MCP_USE_HTTP:
+            logger.info(f"Using HTTP connection to call tool {tool_name} on {MCP_WEATHER_SERVER_URL}")
+            try:
+                result = await _call_mcp_via_http(
+                    MCP_WEATHER_SERVER_URL,
+                    "tools/call",
+                    {
+                        "name": tool_name,
+                        "arguments": arguments
+                    },
+                    request_id=2
+                )
+                # Преобразуем результат в формат, ожидаемый кодом
+                return {
+                    "content": result.get("content", []),
+                    "isError": result.get("isError", False)
+                }
+            except Exception as e:
+                logger.error(f"Error calling tool via HTTP: {e}")
+                raise
+        
         if MCP_AVAILABLE:
             try:
                 resolved_command = _resolve_mcp_server_command(server_name)
