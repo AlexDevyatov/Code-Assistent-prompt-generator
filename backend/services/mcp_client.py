@@ -114,13 +114,33 @@ def _resolve_mcp_server_command(server_name: str) -> Optional[str]:
             "mcp-server-filesystem",
             "filesystem-mcp"
         ]
+    elif "weather" in server_lower:
+        # Для MCP-Weather сервера пробуем найти Python скрипт
+        # Проверяем стандартные пути для установленного сервера
+        weather_paths = [
+            os.path.expanduser("~/MCP-Weather/server.py"),
+            os.path.expanduser("~/.local/share/mcp-weather/server.py"),
+            "/opt/mcp-weather/server.py",
+        ]
+        for path in weather_paths:
+            if os.path.exists(path):
+                # Возвращаем команду для запуска через Python
+                python_path = shutil.which("python3") or shutil.which("python")
+                if python_path:
+                    logger.info(f"Found MCP-Weather server at: {path}")
+                    return f"{python_path} {path}"
+        alternative_names = [
+            "mcp-weather",
+            "weather-mcp",
+            "mcp-server-weather"
+        ]
     
     # Пробуем найти альтернативные имена
     for alt_name in alternative_names:
         alt_resolved = shutil.which(alt_name)
         if alt_resolved:
             logger.info(f"Found MCP server with alternative name: {alt_name} (requested: {server_name}) -> {alt_resolved}")
-            # Возвращаем полный путь
+            # Возвращаем полный путь для надежности
             return alt_resolved
     
     return None
@@ -597,3 +617,213 @@ async def list_mcp_tools(server_name: str, locale: str = "ru-RU") -> Dict[str, A
             "error": str(e),
             "tools": []
         }
+
+
+async def _call_tool_with_fallback(server_name: str, tool_name: str, arguments: Dict[str, Any], locale: str = "ru-RU") -> Dict[str, Any]:
+    """Fallback реализация для вызова инструмента MCP через JSON-RPC"""
+    try:
+        resolved_command = _resolve_mcp_server_command(server_name)
+        resolved = None
+        npx_args = None
+        
+        if resolved_command:
+            if os.path.exists(resolved_command) or os.path.isfile(resolved_command.split()[0] if ' ' in resolved_command else resolved_command):
+                resolved = resolved_command
+            else:
+                resolved = shutil.which(os.path.basename(resolved_command.split()[0] if ' ' in resolved_command else resolved_command)) or resolved_command
+        
+        if not resolved:
+            npx_path = _find_npx()
+            if npx_path:
+                server_lower = server_name.lower()
+                if "weather" in server_lower:
+                    # Для weather сервера используем Python
+                    python_path = shutil.which("python3") or shutil.which("python")
+                    if python_path:
+                        # Пробуем найти server.py
+                        weather_paths = [
+                            os.path.expanduser("~/MCP-Weather/server.py"),
+                            os.path.expanduser("~/.local/share/mcp-weather/server.py"),
+                        ]
+                        for path in weather_paths:
+                            if os.path.exists(path):
+                                resolved = f"{python_path} {path}"
+                                break
+                else:
+                    raise FileNotFoundError(f"MCP server '{server_name}' not found")
+            else:
+                raise FileNotFoundError(f"Neither MCP server '{server_name}' nor 'npx' found")
+        
+        # Подготавливаем переменные окружения
+        env = dict(os.environ)
+        if "python" in str(resolved).lower():
+            env["PYTHONUNBUFFERED"] = "1"
+        
+        # Запускаем процесс
+        if ' ' in resolved:
+            # Команда с аргументами (например, "python3 /path/to/server.py")
+            cmd_parts = resolved.split()
+            process = await asyncio.create_subprocess_exec(
+                *cmd_parts,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                env=env
+            )
+        else:
+            process = await asyncio.create_subprocess_exec(
+                resolved,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                env=env
+            )
+        
+        if not process or not process.stdin or not process.stdout:
+            raise RuntimeError("Failed to create subprocess pipes")
+        
+        await asyncio.sleep(0.5)
+        
+        if process.returncode is not None:
+            stderr_output = b""
+            if process.stderr:
+                try:
+                    stderr_output = await asyncio.wait_for(process.stderr.read(), timeout=1.0)
+                except asyncio.TimeoutError:
+                    pass
+            error_msg = stderr_output.decode('utf-8', errors='ignore') if stderr_output else "Unknown error"
+            raise RuntimeError(f"MCP server process exited with code {process.returncode}: {error_msg}")
+        
+        # Инициализация
+        init_request = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {
+                    "name": "deepseek-web-client",
+                    "version": "1.0.0",
+                    "locale": locale
+                }
+            }
+        }
+        
+        init_message = json.dumps(init_request) + "\n"
+        process.stdin.write(init_message.encode('utf-8'))
+        await process.stdin.drain()
+        
+        init_response_line = await asyncio.wait_for(process.stdout.readline(), timeout=10.0)
+        if not init_response_line:
+            raise RuntimeError("No response from server")
+        
+        init_response = json.loads(init_response_line.decode('utf-8'))
+        
+        # Отправляем initialized notification
+        initialized_notification = {
+            "jsonrpc": "2.0",
+            "method": "notifications/initialized"
+        }
+        process.stdin.write((json.dumps(initialized_notification) + "\n").encode('utf-8'))
+        await process.stdin.drain()
+        
+        # Вызываем инструмент
+        call_request = {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {
+                "name": tool_name,
+                "arguments": arguments
+            }
+        }
+        
+        process.stdin.write((json.dumps(call_request) + "\n").encode('utf-8'))
+        await process.stdin.drain()
+        
+        # Читаем ответ
+        call_response_line = await asyncio.wait_for(process.stdout.readline(), timeout=30.0)
+        if not call_response_line:
+            raise RuntimeError("No response to tool call")
+        
+        call_response = json.loads(call_response_line.decode('utf-8'))
+        
+        # Закрываем процесс
+        process.stdin.close()
+        await process.wait()
+        
+        if "error" in call_response:
+            raise RuntimeError(f"MCP server error: {call_response['error']}")
+        
+        if "result" in call_response:
+            return call_response["result"]
+        else:
+            raise RuntimeError(f"Unexpected response format: {call_response}")
+            
+    except FileNotFoundError:
+        raise
+    except asyncio.TimeoutError:
+        raise RuntimeError("Timeout waiting for MCP server response")
+    except json.JSONDecodeError as e:
+        raise RuntimeError(f"Invalid JSON response from server: {e}")
+    except Exception as e:
+        raise RuntimeError(f"Error calling MCP tool: {e}")
+
+
+async def call_mcp_tool(server_name: str, tool_name: str, arguments: Dict[str, Any], locale: str = "ru-RU") -> Dict[str, Any]:
+    """
+    Вызов инструмента MCP сервера
+    
+    Args:
+        server_name: Имя MCP сервера
+        tool_name: Имя инструмента для вызова
+        arguments: Аргументы для инструмента
+        locale: Предпочтительный язык для ответов
+    
+    Returns:
+        Результат вызова инструмента
+    """
+    try:
+        if MCP_AVAILABLE:
+            try:
+                resolved_command = _resolve_mcp_server_command(server_name)
+                if not resolved_command:
+                    raise FileNotFoundError(f"MCP server '{server_name}' not found in PATH")
+                
+                # Если команда содержит пробелы (например, "python3 /path/to/server.py")
+                if ' ' in resolved_command:
+                    cmd_parts = resolved_command.split()
+                    server_params = StdioServerParameters(
+                        command=cmd_parts[0],
+                        args=cmd_parts[1:],
+                        env=None
+                    )
+                else:
+                    server_params = StdioServerParameters(
+                        command=resolved_command,
+                        args=[],
+                        env=None
+                    )
+                
+                async with stdio_client(server_params) as (read, write):
+                    async with ClientSession(read, write) as session:
+                        await session.initialize()
+                        result = await session.call_tool(tool_name, arguments)
+                        return {
+                            "content": result.content if hasattr(result, 'content') else [],
+                            "isError": getattr(result, 'isError', False)
+                        }
+            except FileNotFoundError:
+                logger.info(f"SDK didn't find binary for {server_name}, trying fallback")
+                return await _call_tool_with_fallback(server_name, tool_name, arguments, locale)
+        else:
+            logger.info(f"Using fallback MCP implementation for {server_name}")
+            return await _call_tool_with_fallback(server_name, tool_name, arguments, locale)
+            
+    except FileNotFoundError as e:
+        logger.error(f"MCP server '{server_name}' not found: {e}")
+        raise
+    except Exception as e:
+        logger.error(f"Error calling MCP tool {tool_name} from server {server_name}: {str(e)}", exc_info=True)
+        raise

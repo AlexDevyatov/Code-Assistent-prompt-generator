@@ -8,6 +8,7 @@ import ModelComparison from './ModelComparison'
 import TokenComparison from './TokenComparison'
 import CompressionTest from './CompressionTest'
 import MCPServer from './MCPServer'
+import WeatherChat from './WeatherChat'
 
 function App() {
   return (
@@ -15,6 +16,7 @@ function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/chat" element={<Chat />} />
+        <Route path="/weather-chat" element={<WeatherChat />} />
         <Route path="/reasoning" element={<ReasoningComparison />} />
         <Route path="/system-prompt" element={<SystemPromptTest />} />
         <Route path="/temperature" element={<TemperatureComparison />} />

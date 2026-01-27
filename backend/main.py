@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.config import STATIC_DIR
-from backend.routers import chat, health, llama, compression, summaries, mcp
+from backend.routers import chat, health, llama, compression, summaries, mcp, weather_chat
 from backend.services.summaries_db import init_db
 
 # Настройка логирования
@@ -39,7 +39,9 @@ app.include_router(llama.router)
 app.include_router(compression.router)
 app.include_router(summaries.router)
 app.include_router(mcp.router)
+app.include_router(weather_chat.router)
 logger.info(f"MCP router registered with prefix: {mcp.router.prefix}")
+logger.info(f"Weather chat router registered with prefix: {weather_chat.router.prefix}")
 
 
 @app.on_event("startup")
