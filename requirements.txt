@@ -3,6 +3,6 @@ uvicorn[standard]==0.24.0
 httpx==0.25.2
 python-dotenv==1.0.0
 pydantic>=2.0.0
-# MCP requires Python 3.10+
-# mcp>=1.0.0  # Uncomment when using Python 3.10+
+# MCP SDK is optional - fallback implementation works without it
+# mcp>=1.0.0  # Optional: install for better performance (requires Python 3.10+)
 

@@ -1,5 +1,7 @@
 """Сервис для подключения к MCP серверам"""
 import logging
+import json
+import asyncio
 from typing import Dict, Any
 
 logger = logging.getLogger(__name__)
@@ -12,7 +14,136 @@ try:
 except ImportError as e:
     MCP_AVAILABLE = False
     IMPORT_ERROR = str(e)
-    logger.warning(f"MCP SDK not available: {IMPORT_ERROR}. MCP features will be disabled.")
+    logger.warning(f"MCP SDK not available: {IMPORT_ERROR}. Using fallback implementation.")
+
+
+async def _list_tools_with_sdk(server_name: str) -> Dict[str, Any]:
+    """Использование официального MCP SDK для получения инструментов"""
+    server_params = StdioServerParameters(
+        command=server_name,
+        args=[],
+        env=None
+    )
+    
+    async with stdio_client(server_params) as (read, write):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            tools_result = await session.list_tools()
+            
+            server_info = {
+                "name": server_name,
+                "tools": []
+            }
+            
+            if tools_result and hasattr(tools_result, 'tools'):
+                for tool in tools_result.tools:
+                    tool_info = {
+                        "name": tool.name,
+                        "description": tool.description or "",
+                        "inputSchema": getattr(tool, 'inputSchema', {})
+                    }
+                    server_info["tools"].append(tool_info)
+            
+            return server_info
+
+
+async def _list_tools_with_fallback(server_name: str) -> Dict[str, Any]:
+    """Fallback реализация через прямое взаимодействие с MCP сервером по JSON-RPC"""
+    try:
+        # Запускаем MCP сервер как subprocess
+        process = await asyncio.create_subprocess_exec(
+            server_name,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        
+        if not process.stdin or not process.stdout:
+            raise RuntimeError("Failed to create subprocess pipes")
+        
+        # Отправляем initialize запрос (JSON-RPC 2.0)
+        init_request = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {
+                    "name": "deepseek-web-client",
+                    "version": "1.0.0"
+                }
+            }
+        }
+        
+        init_message = json.dumps(init_request) + "\n"
+        process.stdin.write(init_message.encode('utf-8'))
+        await process.stdin.drain()
+        
+        # Читаем ответ на initialize
+        init_response_line = await asyncio.wait_for(
+            process.stdout.readline(), timeout=5.0
+        )
+        if not init_response_line:
+            raise RuntimeError("No response from server")
+        
+        init_response = json.loads(init_response_line.decode('utf-8'))
+        
+        # Отправляем initialized notification
+        initialized_notification = {
+            "jsonrpc": "2.0",
+            "method": "notifications/initialized"
+        }
+        process.stdin.write((json.dumps(initialized_notification) + "\n").encode('utf-8'))
+        await process.stdin.drain()
+        
+        # Отправляем запрос на получение списка инструментов
+        tools_request = {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/list",
+            "params": {}
+        }
+        
+        process.stdin.write((json.dumps(tools_request) + "\n").encode('utf-8'))
+        await process.stdin.drain()
+        
+        # Читаем ответ
+        tools_response_line = await asyncio.wait_for(
+            process.stdout.readline(), timeout=5.0
+        )
+        if not tools_response_line:
+            raise RuntimeError("No response to tools/list request")
+        
+        tools_response = json.loads(tools_response_line.decode('utf-8'))
+        
+        # Закрываем процесс
+        process.stdin.close()
+        await process.wait()
+        
+        # Обрабатываем ответ
+        server_info = {
+            "name": server_name,
+            "tools": []
+        }
+        
+        if "result" in tools_response and "tools" in tools_response["result"]:
+            for tool in tools_response["result"]["tools"]:
+                tool_info = {
+                    "name": tool.get("name", ""),
+                    "description": tool.get("description", ""),
+                    "inputSchema": tool.get("inputSchema", {})
+                }
+                server_info["tools"].append(tool_info)
+        
+        return server_info
+        
+    except asyncio.TimeoutError:
+        raise RuntimeError("Timeout waiting for MCP server response")
+    except json.JSONDecodeError as e:
+        raise RuntimeError(f"Invalid JSON response from server: {e}")
+    except Exception as e:
+        raise RuntimeError(f"Error communicating with MCP server: {e}")
 
 
 async def list_mcp_tools(server_name: str) -> Dict[str, Any]:
@@ -25,48 +156,15 @@ async def list_mcp_tools(server_name: str) -> Dict[str, Any]:
     Returns:
         Словарь с информацией о сервере и инструментах
     """
-    if not MCP_AVAILABLE:
-        return {
-            "name": server_name,
-            "error": f"MCP SDK is not available. {IMPORT_ERROR}. Please install MCP package (requires Python 3.10+): pip install mcp",
-            "tools": []
-        }
-    
     try:
-        # Параметры для подключения к серверу через stdio
-        # Предполагаем, что сервер доступен как команда в PATH
-        server_params = StdioServerParameters(
-            command=server_name,
-            args=[],
-            env=None
-        )
-        
-        # Подключаемся к серверу и получаем список инструментов
-        async with stdio_client(server_params) as (read, write):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                
-                # Получаем список инструментов
-                tools_result = await session.list_tools()
-                
-                # Получаем информацию о сервере
-                server_info = {
-                    "name": server_name,
-                    "tools": []
-                }
-                
-                # tools_result имеет атрибут .tools со списком инструментов
-                if tools_result and hasattr(tools_result, 'tools'):
-                    for tool in tools_result.tools:
-                        tool_info = {
-                            "name": tool.name,
-                            "description": tool.description or "",
-                            "inputSchema": getattr(tool, 'inputSchema', {})
-                        }
-                        server_info["tools"].append(tool_info)
-                
-                return server_info
-                
+        # Пробуем использовать официальный SDK, если доступен
+        if MCP_AVAILABLE:
+            return await _list_tools_with_sdk(server_name)
+        else:
+            # Используем fallback реализацию
+            logger.info(f"Using fallback MCP implementation for {server_name}")
+            return await _list_tools_with_fallback(server_name)
+            
     except FileNotFoundError:
         logger.error(f"MCP server '{server_name}' not found. Make sure it's installed and in PATH.")
         return {
