@@ -68,62 +68,66 @@ def _extract_weather_intent(prompt: str) -> Optional[Dict[str, Any]]:
         intent["type"] = "current"
     
     # Извлекаем местоположение
-    # Используем оригинальный prompt для сохранения регистра названий городов
-    # Улучшенные паттерны для поиска названий городов
-    location_patterns = [
-        # Приоритет 1: "погода в Москве", "какая погода в Санкт-Петербурге"
-        # Ищем "погода" или "weather", затем "в", затем название города
-        r'(?:погода|weather|прогноз|forecast)\s+в\s+([А-ЯЁа-яёA-Z][А-ЯЁа-яёA-Za-z\s\-]+?)(?:\s|$|,|\.|\?|!)',
-        # Приоритет 2: "расскажи какая погода в Москве" - ищем "в" перед названием города
-        # Используем более строгий паттерн: "в" должен быть после слова о погоде
-        r'(?:какая|какой|какое|какие|расскажи|скажи|покажи|tell|show|say).*?(?:погода|weather)\s+в\s+([А-ЯЁа-яёA-Z][А-ЯЁа-яёA-Za-z\s\-]+?)(?:\s|$|,|\.|\?|!)',
-        # Приоритет 3: "в Москве" - общий паттерн для "в" + название города
-        r'в\s+([А-ЯЁа-яёA-Z][А-ЯЁа-яёA-Za-z\s\-]+?)(?:\s|$|,|\.|\?|!)',
-        # Приоритет 4: "для Москвы", "for City_name"
-        r'(?:для|for)\s+([А-ЯЁа-яёA-Z][А-ЯЁа-яёA-Za-z\s\-]+?)(?:\s|$|,|\.|\?|!)',
-        # Приоритет 5: "Москва погода", "City_name weather"
-        r'([А-ЯЁа-яёA-Z][А-ЯЁа-яёA-Za-z\s\-]+?)\s+(?:погода|weather|прогноз|forecast)',
-        # Приоритет 6: "weather in City_name"
-        r'weather\s+in\s+([A-Z][A-Za-z\s\-]+?)(?:\s|$|,|\.|\?|!)',
-        # Приоритет 7: "погода City_name" (без предлога)
-        r'погода\s+([А-ЯЁа-яёA-Z][А-ЯЁа-яёA-Za-z\s\-]+?)(?:\s|$|,|\.|\?|!)',
-    ]
-    
+    # Упрощенная и более надежная логика извлечения
     # Список слов для исключения
     exclude_words = [
         "какая", "какой", "какое", "какие", "the", "a", "an", "в", "для", "for",
         "на", "по", "с", "о", "об", "про", "как", "что", "где", "когда",
-        "расскажи", "скажи", "покажи", "tell", "show", "say"
+        "расскажи", "скажи", "покажи", "tell", "show", "say", "погода", "weather"
     ]
     
-    # Ищем в оригинальном prompt (с сохранением регистра)
-    for pattern in location_patterns:
-        match = re.search(pattern, prompt, re.IGNORECASE)
+    # Метод 1: Ищем паттерн "в [название города]" - самый частый случай
+    # Ищем "в" или "in", затем слова до конца строки или знака препинания
+    # Берем до 3 слов (для названий типа "Санкт-Петербург", "Нью-Йорк")
+    pattern_v = r'\b(?:в|in)\s+((?:[А-ЯЁа-яёA-Za-z][А-ЯЁа-яёA-Za-z\-]*\s*){1,3})(?:\s|$|,|\.|\?|!|;|:)'
+    match = re.search(pattern_v, prompt, re.IGNORECASE)
+    if match:
+        location = match.group(1).strip().rstrip('.,!?;:()[]{}"\'')
+        location_words = location.split()
+        # Фильтруем стоп-слова из начала
+        filtered_words = []
+        for word in location_words:
+            word_clean = word.strip('.,!?;:()[]{}"\'')
+            if word_clean.lower() not in exclude_words:
+                filtered_words.append(word_clean)
+            else:
+                break  # Если встретили стоп-слово, останавливаемся
+        
+        if filtered_words:
+            location = ' '.join(filtered_words)
+            location_lower = location.lower()
+            # Проверяем, что это не исключенное слово и имеет достаточную длину
+            if (location and len(location) > 2 and 
+                location_lower not in exclude_words):
+                # Приводим к правильному регистру (каждое слово с заглавной буквы)
+                location = ' '.join(word.capitalize() for word in location.split())
+                intent["location"] = location
+                logger.info(f"Extracted location (method 1 - 'в'): {location} from prompt: {prompt}")
+    
+    # Метод 2: Если не нашли через "в", ищем паттерн "[название города] погода"
+    if not intent["location"]:
+        pattern_city_first = r'([А-ЯЁа-яёA-Za-z][А-ЯЁа-яёA-Za-z\s\-]+?)\s+(?:погода|weather|прогноз|forecast)'
+        match = re.search(pattern_city_first, prompt, re.IGNORECASE)
         if match:
-            location = match.group(1).strip()
-            # Убираем лишние пробелы и знаки препинания в конце
-            location = location.rstrip('.,!?;:()[]{}"\'')
-            # Фильтруем общие слова и проверяем длину
+            location = match.group(1).strip().rstrip('.,!?;:()[]{}"\'')
             location_lower = location.lower()
             if (location and len(location) > 2 and 
-                location_lower not in exclude_words and
-                not any(location_lower.startswith(excl) for excl in exclude_words) and
-                not any(location_lower.endswith(excl) for excl in exclude_words)):
+                location_lower not in exclude_words):
+                # Приводим к правильному регистру
+                if location[0].islower():
+                    location = location[0].upper() + location[1:]
                 intent["location"] = location
-                logger.info(f"Extracted location: {location} from prompt: {prompt}")
-                break
+                logger.info(f"Extracted location (method 2 - city first): {location} from prompt: {prompt}")
     
-    # Если местоположение не найдено, пробуем найти название города в тексте
+    # Метод 3: Ищем слова с заглавной буквы в тексте (резервный метод)
     if not intent["location"]:
         words = prompt.split()
-        # Берем слова с заглавной буквы как возможные названия городов
         for word in words:
-            # Убираем знаки препинания
             clean_word = word.strip('.,!?;:()[]{}"\'')
             if (clean_word and clean_word[0].isupper() and len(clean_word) > 2 and
                 clean_word.lower() not in weather_keywords + exclude_words):
                 intent["location"] = clean_word
-                logger.info(f"Extracted location from capitalized word: {clean_word}")
+                logger.info(f"Extracted location (method 3 - capitalized): {clean_word} from prompt: {prompt}")
                 break
     
     return intent
@@ -208,9 +212,11 @@ async def weather_chat(request: WeatherChatRequest):
         
         # Извлекаем намерение пользователя
         intent = _extract_weather_intent(request.prompt)
+        logger.info(f"Extracted intent: {intent}")
         
         if not intent:
             # Если это не запрос о погоде, отвечаем обычным способом
+            logger.info("ℹ️ No weather intent detected, using DeepSeek API directly (MCP will NOT be called)")
             messages = [
                 {"role": "system", "content": "Ты универсальный AI-помощник. Отвечай на любые вопросы пользователя. Если пользователь спрашивает о погоде, используй доступные инструменты для получения актуальной информации."},
                 {"role": "user", "content": request.prompt}
@@ -223,8 +229,13 @@ async def weather_chat(request: WeatherChatRequest):
                 raise HTTPException(status_code=500, detail="Unexpected response format from DeepSeek API")
         
         # Получаем данные о погоде через MCP (обязательно для запросов о погоде)
-        logger.info(f"Weather intent detected: {intent}, calling MCP server")
+        logger.info(f"🌤️ Weather intent detected: {intent}, calling MCP server '{WEATHER_MCP_SERVER}'")
+        logger.info(f"🔧 MCP will be called with tool based on intent type: {intent['type']}")
         weather_data = await _get_weather_data(intent)
+        if weather_data:
+            logger.info(f"✅ MCP server returned weather data successfully (length: {len(weather_data)} chars)")
+        else:
+            logger.warning(f"⚠️ MCP server did not return weather data, will use DeepSeek fallback")
         
         if weather_data:
             # Если получили данные о погоде, формируем ответ
