@@ -242,12 +242,34 @@ async def _list_tools_with_fallback(server_name: str) -> Dict[str, Any]:
                         current_path.insert(0, node_path)
                 env["PATH"] = os.pathsep.join(current_path)
                 
-                # Настраиваем npm cache в домашней директории пользователя, чтобы избежать проблем с правами
-                user_home = os.path.expanduser("~")
-                npm_cache_dir = os.path.join(user_home, ".npm-cache-mcp")
-                os.makedirs(npm_cache_dir, exist_ok=True)
+                # Настраиваем npm cache в временной директории, чтобы избежать проблем с правами
+                # Используем временную директорию или домашнюю директорию текущего пользователя
+                try:
+                    # Пробуем использовать домашнюю директорию текущего пользователя
+                    user_home = os.path.expanduser("~")
+                    # Проверяем, что это не системная директория без прав
+                    if user_home.startswith("/var/www") or not os.access(user_home, os.W_OK):
+                        # Используем временную директорию
+                        npm_cache_dir = os.path.join(os.path.expanduser("~"), ".npm-cache-mcp")
+                        # Если и это не работает, используем системную временную директорию
+                        if not os.access(os.path.dirname(npm_cache_dir), os.W_OK):
+                            npm_cache_dir = os.path.join("/tmp", f"npm-cache-mcp-{os.getuid()}")
+                    else:
+                        npm_cache_dir = os.path.join(user_home, ".npm-cache-mcp")
+                except Exception:
+                    # В крайнем случае используем /tmp
+                    npm_cache_dir = os.path.join("/tmp", f"npm-cache-mcp-{os.getuid()}")
+                
+                # Создаем директорию, если её нет
+                try:
+                    os.makedirs(npm_cache_dir, exist_ok=True, mode=0o700)
+                except (OSError, PermissionError):
+                    # Если не получилось создать, используем /tmp
+                    npm_cache_dir = os.path.join("/tmp", f"npm-cache-mcp-{os.getuid()}")
+                    os.makedirs(npm_cache_dir, exist_ok=True, mode=0o700)
+                
                 env["NPM_CONFIG_CACHE"] = npm_cache_dir
-                env["NPM_CONFIG_PREFIX"] = os.path.join(user_home, ".npm-global")
+                # Не устанавливаем NPM_CONFIG_PREFIX, чтобы не создавать проблем
                 
                 # Используем --yes для автоматического подтверждения и --prefer-offline для избежания проблем с кэшем
                 npx_args_with_flags = list(npx_args)
@@ -310,12 +332,30 @@ async def _list_tools_with_fallback(server_name: str) -> Dict[str, Any]:
                             current_path.insert(0, node_path)
                     env["PATH"] = os.pathsep.join(current_path)
                     
-                    # Настраиваем npm cache в домашней директории пользователя
-                    user_home = os.path.expanduser("~")
-                    npm_cache_dir = os.path.join(user_home, ".npm-cache-mcp")
-                    os.makedirs(npm_cache_dir, exist_ok=True)
+                    # Настраиваем npm cache в временной директории, чтобы избежать проблем с правами
+                    try:
+                        # Пробуем использовать домашнюю директорию текущего пользователя
+                        user_home = os.path.expanduser("~")
+                        # Проверяем, что это не системная директория без прав
+                        if user_home.startswith("/var/www") or not os.access(user_home, os.W_OK):
+                            # Используем временную директорию
+                            npm_cache_dir = os.path.join("/tmp", f"npm-cache-mcp-{os.getuid()}")
+                        else:
+                            npm_cache_dir = os.path.join(user_home, ".npm-cache-mcp")
+                    except Exception:
+                        # В крайнем случае используем /tmp
+                        npm_cache_dir = os.path.join("/tmp", f"npm-cache-mcp-{os.getuid()}")
+                    
+                    # Создаем директорию, если её нет
+                    try:
+                        os.makedirs(npm_cache_dir, exist_ok=True, mode=0o700)
+                    except (OSError, PermissionError):
+                        # Если не получилось создать, используем /tmp
+                        npm_cache_dir = os.path.join("/tmp", f"npm-cache-mcp-{os.getuid()}")
+                        os.makedirs(npm_cache_dir, exist_ok=True, mode=0o700)
+                    
                     env["NPM_CONFIG_CACHE"] = npm_cache_dir
-                    env["NPM_CONFIG_PREFIX"] = os.path.join(user_home, ".npm-global")
+                    # Не устанавливаем NPM_CONFIG_PREFIX, чтобы не создавать проблем
                     
                     process = await asyncio.create_subprocess_exec(
                         resolved,
