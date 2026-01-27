@@ -71,6 +71,10 @@ if npm install -g "$NPM_PACKAGE"; then
     echo -e "${GREEN}✓ Successfully installed $NPM_PACKAGE${NC}"
     echo ""
     
+    # Get npm global bin directory
+    NPM_PREFIX=$(npm config get prefix)
+    NPM_BIN_DIR="$NPM_PREFIX/bin"
+    
     # Check if the binary is available
     if command -v "$SERVER_NAME" &> /dev/null; then
         echo -e "${GREEN}✓ Server binary '$SERVER_NAME' is now available in PATH${NC}"
@@ -82,6 +86,28 @@ if npm install -g "$NPM_PACKAGE"; then
         echo -e "${YELLOW}⚠ Warning: Server binary '$SERVER_NAME' not found in PATH${NC}"
         echo ""
         echo "The package was installed, but the binary might have a different name."
+        echo ""
+        echo "Adding npm global bin to PATH for current session..."
+        echo "To make it permanent, add this to your shell profile (~/.bashrc, ~/.zshrc, etc.):"
+        echo ""
+        echo "  export PATH=\"$NPM_BIN_DIR:\$PATH\""
+        echo ""
+        
+        # Try to add to PATH for current session
+        export PATH="$NPM_BIN_DIR:$PATH"
+        
+        # Check again after adding to PATH
+        if command -v "$SERVER_NAME" &> /dev/null; then
+            echo -e "${GREEN}✓ Server binary '$SERVER_NAME' is now available after adding to PATH${NC}"
+            echo "Location: $(which $SERVER_NAME)"
+        else
+            echo "Note: This server can be run via npx:"
+            echo "  npx -y $NPM_PACKAGE"
+            echo ""
+            echo "The application will automatically use npx if the binary is not found."
+        fi
+        
+        echo ""
         echo "Check npm global bin directory:"
         echo "  npm config get prefix"
         echo ""

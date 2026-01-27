@@ -55,23 +55,27 @@ async def _list_tools_with_fallback(server_name: str) -> Dict[str, Any]:
         # Определяем команду для запуска сервера
         # Сначала проверяем, доступен ли бинарь напрямую
         resolved = server_name if os.path.isabs(server_name) else shutil.which(server_name)
+        npx_args = None
         
         # Если бинарь не найден, пытаемся использовать npx с соответствующим пакетом
         if not resolved:
+            # Проверяем, доступен ли npx
+            npx_path = shutil.which("npx")
+            if not npx_path:
+                raise FileNotFoundError(f"Neither MCP server '{server_name}' nor 'npx' found in PATH")
+            
             # Определяем npm пакет на основе имени сервера
             if "google" in server_name.lower() or "search" in server_name.lower():
                 npm_package = "@mcp-server/google-search-mcp"
                 # Используем npx для запуска
-                resolved = "npx"
+                resolved = npx_path
                 npx_args = ["-y", npm_package]
             elif "filesystem" in server_name.lower():
                 npm_package = "@modelcontextprotocol/server-filesystem"
-                resolved = "npx"
+                resolved = npx_path
                 npx_args = ["-y", npm_package]
             else:
                 raise FileNotFoundError(f"MCP server '{server_name}' not found in PATH and no npx package available")
-        else:
-            npx_args = None
 
         # Запускаем MCP сервер как subprocess
         if npx_args:
