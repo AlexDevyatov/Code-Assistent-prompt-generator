@@ -15,6 +15,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Проверка, что MCP роутер импортирован
+try:
+    logger.info(f"MCP router imported: {mcp.router.prefix}, routes: {len(mcp.router.routes)}")
+except Exception as e:
+    logger.error(f"Error importing MCP router: {e}")
+
 app = FastAPI()
 
 # Настройка CORS
@@ -33,6 +39,7 @@ app.include_router(llama.router)
 app.include_router(compression.router)
 app.include_router(summaries.router)
 app.include_router(mcp.router)
+logger.info(f"MCP router registered with prefix: {mcp.router.prefix}")
 
 
 @app.on_event("startup")
