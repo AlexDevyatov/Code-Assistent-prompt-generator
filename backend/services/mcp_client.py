@@ -242,12 +242,24 @@ async def _list_tools_with_fallback(server_name: str) -> Dict[str, Any]:
                         current_path.insert(0, node_path)
                 env["PATH"] = os.pathsep.join(current_path)
                 
-                logger.info(f"Using npx with PATH: {env['PATH'][:100]}...")
+                # Настраиваем npm cache в домашней директории пользователя, чтобы избежать проблем с правами
+                user_home = os.path.expanduser("~")
+                npm_cache_dir = os.path.join(user_home, ".npm-cache-mcp")
+                os.makedirs(npm_cache_dir, exist_ok=True)
+                env["NPM_CONFIG_CACHE"] = npm_cache_dir
+                env["NPM_CONFIG_PREFIX"] = os.path.join(user_home, ".npm-global")
+                
+                # Используем --yes для автоматического подтверждения и --prefer-offline для избежания проблем с кэшем
+                npx_args_with_flags = list(npx_args)
+                if "-y" not in npx_args_with_flags:
+                    npx_args_with_flags.insert(0, "-y")
+                
+                logger.info(f"Using npx with PATH: {env['PATH'][:100]}..., cache: {npm_cache_dir}")
                 
                 # Используем unbuffered режим для stdout/stderr
                 process = await asyncio.create_subprocess_exec(
                     resolved,
-                    *npx_args,
+                    *npx_args_with_flags,
                     stdin=asyncio.subprocess.PIPE,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
@@ -297,6 +309,13 @@ async def _list_tools_with_fallback(server_name: str) -> Dict[str, Any]:
                         if node_path not in current_path:
                             current_path.insert(0, node_path)
                     env["PATH"] = os.pathsep.join(current_path)
+                    
+                    # Настраиваем npm cache в домашней директории пользователя
+                    user_home = os.path.expanduser("~")
+                    npm_cache_dir = os.path.join(user_home, ".npm-cache-mcp")
+                    os.makedirs(npm_cache_dir, exist_ok=True)
+                    env["NPM_CONFIG_CACHE"] = npm_cache_dir
+                    env["NPM_CONFIG_PREFIX"] = os.path.join(user_home, ".npm-global")
                     
                     process = await asyncio.create_subprocess_exec(
                         resolved,
