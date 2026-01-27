@@ -114,45 +114,98 @@ if npm install -g "$NPM_PACKAGE"; then
     echo -e "${GREEN}✓ Successfully installed $NPM_PACKAGE${NC}"
     echo ""
     
-    # Get npm global bin directory
-    NPM_PREFIX=$(npm config get prefix)
+    # Get npm global bin directory (refresh after installation)
+    NPM_PREFIX=$(npm config get prefix 2>/dev/null || echo "$HOME/.npm-global")
     NPM_BIN_DIR="$NPM_PREFIX/bin"
     
+    # Ensure npm global bin is in PATH
+    if [[ ":$PATH:" != *":$NPM_BIN_DIR:"* ]]; then
+        export PATH="$NPM_BIN_DIR:$PATH"
+        echo -e "${GREEN}✓ Added npm global bin to PATH: $NPM_BIN_DIR${NC}"
+    fi
+    
+    # Try to find the binary in npm global bin directory
+    BINARY_PATH=""
+    if [[ -f "$NPM_BIN_DIR/$SERVER_NAME" ]]; then
+        BINARY_PATH="$NPM_BIN_DIR/$SERVER_NAME"
+    elif command -v "$SERVER_NAME" &> /dev/null; then
+        BINARY_PATH=$(which "$SERVER_NAME")
+    else
+        # Try to find with different name patterns
+        for pattern in "$SERVER_NAME" "mcp-${SERVER_NAME#mcp-server-}" "${SERVER_NAME#mcp-server-}"; do
+            if [[ -f "$NPM_BIN_DIR/$pattern" ]]; then
+                BINARY_PATH="$NPM_BIN_DIR/$pattern"
+                echo -e "${YELLOW}ℹ Found binary with name: $pattern${NC}"
+                break
+            fi
+        done
+    fi
+    
     # Check if the binary is available
-    if command -v "$SERVER_NAME" &> /dev/null; then
-        echo -e "${GREEN}✓ Server binary '$SERVER_NAME' is now available in PATH${NC}"
+    if [[ -n "$BINARY_PATH" ]] && [[ -f "$BINARY_PATH" ]]; then
+        echo -e "${GREEN}✓ Server binary found: $BINARY_PATH${NC}"
         echo ""
-        echo "Location: $(which $SERVER_NAME)"
+        
+        # Make sure it's executable
+        chmod +x "$BINARY_PATH" 2>/dev/null || true
+        
+        # Verify it's in PATH
+        if command -v "$SERVER_NAME" &> /dev/null; then
+            echo -e "${GREEN}✓ Server binary '$SERVER_NAME' is available in PATH${NC}"
+            echo "  Location: $(which $SERVER_NAME)"
+        else
+            # Create symlink in a directory that's in PATH, or add to PATH
+            LOCAL_BIN="$HOME/.local/bin"
+            if [[ -d "$LOCAL_BIN" ]] || mkdir -p "$LOCAL_BIN" 2>/dev/null; then
+                if [[ ! -f "$LOCAL_BIN/$SERVER_NAME" ]]; then
+                    ln -sf "$BINARY_PATH" "$LOCAL_BIN/$SERVER_NAME" 2>/dev/null && {
+                        echo -e "${GREEN}✓ Created symlink in $LOCAL_BIN/$SERVER_NAME${NC}"
+                        if [[ ":$PATH:" != *":$LOCAL_BIN:"* ]]; then
+                            export PATH="$LOCAL_BIN:$PATH"
+                            echo -e "${GREEN}✓ Added $LOCAL_BIN to PATH${NC}"
+                        fi
+                    } || echo -e "${YELLOW}⚠ Could not create symlink (permissions?)${NC}"
+                fi
+            fi
+            
+            # Final check
+            if command -v "$SERVER_NAME" &> /dev/null; then
+                echo -e "${GREEN}✓ Server binary '$SERVER_NAME' is now available in PATH${NC}"
+                echo "  Location: $(which $SERVER_NAME)"
+            else
+                echo -e "${YELLOW}⚠ Binary exists but not in PATH${NC}"
+                echo "  Binary location: $BINARY_PATH"
+                echo "  You can run it directly: $BINARY_PATH"
+                echo "  Or add to PATH: export PATH=\"$NPM_BIN_DIR:\$PATH\""
+            fi
+        fi
         echo ""
         echo "You can now use this server in the MCP interface."
     else
-        echo -e "${YELLOW}⚠ Warning: Server binary '$SERVER_NAME' not found in PATH${NC}"
+        echo -e "${YELLOW}⚠ Warning: Server binary '$SERVER_NAME' not found${NC}"
         echo ""
         echo "The package was installed, but the binary might have a different name."
-        echo ""
-        echo "Adding npm global bin to PATH for current session..."
-        echo "To make it permanent, add this to your shell profile (~/.bashrc, ~/.zshrc, etc.):"
-        echo ""
-        echo "  export PATH=\"$NPM_BIN_DIR:\$PATH\""
+        echo "Checking npm package bin directory..."
         echo ""
         
-        # Try to add to PATH for current session
-        export PATH="$NPM_BIN_DIR:$PATH"
-        
-        # Check again after adding to PATH
-        if command -v "$SERVER_NAME" &> /dev/null; then
-            echo -e "${GREEN}✓ Server binary '$SERVER_NAME' is now available after adding to PATH${NC}"
-            echo "Location: $(which $SERVER_NAME)"
-        else
-            echo "Note: This server can be run via npx:"
-            echo "  npx -y $NPM_PACKAGE"
-            echo ""
-            echo "The application will automatically use npx if the binary is not found."
+        # Check package.json for bin entry
+        PACKAGE_DIR="$NPM_PREFIX/lib/node_modules/$NPM_PACKAGE"
+        if [[ -f "$PACKAGE_DIR/package.json" ]]; then
+            BIN_NAME=$(grep -A 5 '"bin"' "$PACKAGE_DIR/package.json" 2>/dev/null | head -10)
+            if [[ -n "$BIN_NAME" ]]; then
+                echo "Package bin configuration:"
+                echo "$BIN_NAME"
+                echo ""
+            fi
         fi
         
+        echo "Note: This server can be run via npx:"
+        echo "  npx -y $NPM_PACKAGE"
+        echo ""
+        echo "The application will automatically use npx if the binary is not found."
         echo ""
         echo "Check npm global bin directory:"
-        echo "  npm config get prefix"
+        echo "  ls -la $NPM_BIN_DIR | grep -i mcp"
         echo ""
         echo "Or list installed MCP servers:"
         echo "  npm list -g | grep mcp"
