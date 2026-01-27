@@ -206,16 +206,131 @@
   margin-bottom: 1rem;
 }
 
+.mcp-server-tool-icon {
+  margin-right: 0.5rem;
+  font-size: 1.25rem;
+}
+
 .mcp-server-tool-schema {
   margin-top: 1rem;
   padding-top: 1rem;
   border-top: 1px solid #e0e0e0;
 }
 
-.mcp-server-tool-schema strong {
+.mcp-server-params-title {
   display: block;
-  margin-bottom: 0.5rem;
+  margin-bottom: 1rem;
   color: #333;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.mcp-server-params-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.mcp-server-param-item {
+  background: #ffffff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 1rem;
+  transition: all 0.2s ease;
+}
+
+.mcp-server-param-item:hover {
+  border-color: #667eea;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.1);
+}
+
+.mcp-server-param-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.mcp-server-param-name {
+  font-weight: 600;
+  color: #333;
+  font-size: 1rem;
+}
+
+.mcp-server-param-type {
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  background: #e3f2fd;
+  color: #1976d2;
+}
+
+.mcp-server-param-type.string {
+  background: #e8f5e9;
+  color: #388e3c;
+}
+
+.mcp-server-param-type.number {
+  background: #fff3e0;
+  color: #f57c00;
+}
+
+.mcp-server-param-type.boolean {
+  background: #f3e5f5;
+  color: #7b1fa2;
+}
+
+.mcp-server-param-type.object {
+  background: #eceff1;
+  color: #455a64;
+}
+
+.mcp-server-param-required {
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: #ffebee;
+  color: #c62828;
+}
+
+.mcp-server-param-optional {
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  background: #f5f5f5;
+  color: #757575;
+}
+
+.mcp-server-param-description {
+  margin: 0.5rem 0 0 0;
+  color: #666;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.mcp-server-param-default {
+  margin: 0.5rem 0 0 0;
+  color: #888;
+  font-size: 0.85rem;
+}
+
+.mcp-server-param-default code {
+  background: #f5f5f5;
+  padding: 0.2rem 0.4rem;
+  border-radius: 3px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.85rem;
+  color: #333;
+}
+
+.mcp-server-no-params {
+  color: #999;
+  font-style: italic;
+  margin: 0;
 }
 
 .mcp-server-schema-code {

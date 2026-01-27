@@ -127,22 +127,66 @@ function MCPServer() {
               </div>
             ) : (
               <div className="mcp-server-tools">
-                {serverInfo.tools.map((tool, index) => (
-                  <div key={index} className="mcp-server-tool-card">
-                    <h3 className="mcp-server-tool-name">{tool.name}</h3>
-                    {tool.description && (
-                      <p className="mcp-server-tool-description">{tool.description}</p>
-                    )}
-                    {tool.inputSchema && Object.keys(tool.inputSchema).length > 0 && (
-                      <div className="mcp-server-tool-schema">
-                        <strong>Параметры:</strong>
-                        <pre className="mcp-server-schema-code">
-                          {JSON.stringify(tool.inputSchema, null, 2)}
-                        </pre>
-                      </div>
-                    )}
-                  </div>
-                ))}
+                {serverInfo.tools.map((tool, index) => {
+                  const schema = tool.inputSchema || {}
+                  const properties = schema.properties || {}
+                  const required = schema.required || []
+                  
+                  return (
+                    <div key={index} className="mcp-server-tool-card">
+                      <h3 className="mcp-server-tool-name">
+                        <span className="mcp-server-tool-icon">🔧</span>
+                        {tool.name}
+                      </h3>
+                      {tool.description && (
+                        <p className="mcp-server-tool-description">{tool.description}</p>
+                      )}
+                      
+                      {Object.keys(properties).length > 0 && (
+                        <div className="mcp-server-tool-schema">
+                          <strong className="mcp-server-params-title">Параметры:</strong>
+                          <div className="mcp-server-params-list">
+                            {Object.entries(properties).map(([paramName, paramInfo]: [string, any]) => {
+                              const isRequired = required.includes(paramName)
+                              const paramType = paramInfo.type || 'unknown'
+                              const paramDesc = paramInfo.description || ''
+                              const defaultValue = paramInfo.default
+                              
+                              return (
+                                <div key={paramName} className="mcp-server-param-item">
+                                  <div className="mcp-server-param-header">
+                                    <span className="mcp-server-param-name">{paramName}</span>
+                                    <span className={`mcp-server-param-type ${paramType}`}>{paramType}</span>
+                                    {isRequired && (
+                                      <span className="mcp-server-param-required">обязательный</span>
+                                    )}
+                                    {!isRequired && (
+                                      <span className="mcp-server-param-optional">опциональный</span>
+                                    )}
+                                  </div>
+                                  {paramDesc && (
+                                    <p className="mcp-server-param-description">{paramDesc}</p>
+                                  )}
+                                  {defaultValue !== undefined && (
+                                    <p className="mcp-server-param-default">
+                                      По умолчанию: <code>{String(defaultValue)}</code>
+                                    </p>
+                                  )}
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {Object.keys(properties).length === 0 && (
+                        <div className="mcp-server-tool-schema">
+                          <p className="mcp-server-no-params">Параметры не требуются</p>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             )}
           </div>
