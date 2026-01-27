@@ -68,31 +68,49 @@ def _extract_weather_intent(prompt: str) -> Optional[Dict[str, Any]]:
         intent["type"] = "current"
     
     # Извлекаем местоположение
+    # Используем оригинальный prompt для сохранения регистра названий городов
     # Улучшенные паттерны для поиска названий городов
     location_patterns = [
-        r'в\s+([А-ЯЁа-яёA-Z][А-ЯЁа-яёA-Za-z\s\-]+?)(?:\s|$|,|\.|\?)',
-        r'для\s+([А-ЯЁа-яёA-Z][А-ЯЁа-яёA-Za-z\s\-]+?)(?:\s|$|,|\.|\?)',
-        r'([А-ЯЁа-яёA-Z][а-яёA-Za-z\s\-]+?)\s+(?:погода|weather|прогноз|forecast)',
-        r'погода\s+в\s+([А-ЯЁа-яёA-Z][А-ЯЁа-яёA-Za-z\s\-]+?)(?:\s|$|,|\.|\?)',
-        r'weather\s+in\s+([A-Z][A-Za-z\s\-]+?)(?:\s|$|,|\.|\?)',
-        r'погода\s+([А-ЯЁа-яёA-Z][А-ЯЁа-яёA-Za-z\s\-]+?)(?:\s|$|,|\.|\?)',
+        # Приоритет 1: "погода в Москве", "какая погода в Санкт-Петербурге"
+        # Ищем "погода" или "weather", затем "в", затем название города
+        r'(?:погода|weather|прогноз|forecast)\s+в\s+([А-ЯЁа-яёA-Z][А-ЯЁа-яёA-Za-z\s\-]+?)(?:\s|$|,|\.|\?|!)',
+        # Приоритет 2: "расскажи какая погода в Москве" - ищем "в" перед названием города
+        # Используем более строгий паттерн: "в" должен быть после слова о погоде
+        r'(?:какая|какой|какое|какие|расскажи|скажи|покажи|tell|show|say).*?(?:погода|weather)\s+в\s+([А-ЯЁа-яёA-Z][А-ЯЁа-яёA-Za-z\s\-]+?)(?:\s|$|,|\.|\?|!)',
+        # Приоритет 3: "в Москве" - общий паттерн для "в" + название города
+        r'в\s+([А-ЯЁа-яёA-Z][А-ЯЁа-яёA-Za-z\s\-]+?)(?:\s|$|,|\.|\?|!)',
+        # Приоритет 4: "для Москвы", "for City_name"
+        r'(?:для|for)\s+([А-ЯЁа-яёA-Z][А-ЯЁа-яёA-Za-z\s\-]+?)(?:\s|$|,|\.|\?|!)',
+        # Приоритет 5: "Москва погода", "City_name weather"
+        r'([А-ЯЁа-яёA-Z][А-ЯЁа-яёA-Za-z\s\-]+?)\s+(?:погода|weather|прогноз|forecast)',
+        # Приоритет 6: "weather in City_name"
+        r'weather\s+in\s+([A-Z][A-Za-z\s\-]+?)(?:\s|$|,|\.|\?|!)',
+        # Приоритет 7: "погода City_name" (без предлога)
+        r'погода\s+([А-ЯЁа-яёA-Z][А-ЯЁа-яёA-Za-z\s\-]+?)(?:\s|$|,|\.|\?|!)',
     ]
     
     # Список слов для исключения
     exclude_words = [
-        "какая", "какой", "какое", "какие", "the", "a", "an", "в", "для", 
-        "на", "по", "с", "о", "об", "про", "как", "что", "где", "когда"
+        "какая", "какой", "какое", "какие", "the", "a", "an", "в", "для", "for",
+        "на", "по", "с", "о", "об", "про", "как", "что", "где", "когда",
+        "расскажи", "скажи", "покажи", "tell", "show", "say"
     ]
     
+    # Ищем в оригинальном prompt (с сохранением регистра)
     for pattern in location_patterns:
-        match = re.search(pattern, prompt_lower)
+        match = re.search(pattern, prompt, re.IGNORECASE)
         if match:
             location = match.group(1).strip()
+            # Убираем лишние пробелы и знаки препинания в конце
+            location = location.rstrip('.,!?;:()[]{}"\'')
             # Фильтруем общие слова и проверяем длину
+            location_lower = location.lower()
             if (location and len(location) > 2 and 
-                location.lower() not in exclude_words and
-                not any(location.lower().startswith(excl) for excl in exclude_words)):
+                location_lower not in exclude_words and
+                not any(location_lower.startswith(excl) for excl in exclude_words) and
+                not any(location_lower.endswith(excl) for excl in exclude_words)):
                 intent["location"] = location
+                logger.info(f"Extracted location: {location} from prompt: {prompt}")
                 break
     
     # Если местоположение не найдено, пробуем найти название города в тексте
@@ -105,6 +123,7 @@ def _extract_weather_intent(prompt: str) -> Optional[Dict[str, Any]]:
             if (clean_word and clean_word[0].isupper() and len(clean_word) > 2 and
                 clean_word.lower() not in weather_keywords + exclude_words):
                 intent["location"] = clean_word
+                logger.info(f"Extracted location from capitalized word: {clean_word}")
                 break
     
     return intent
