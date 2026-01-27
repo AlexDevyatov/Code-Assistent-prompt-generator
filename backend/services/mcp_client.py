@@ -52,18 +52,45 @@ async def _list_tools_with_sdk(server_name: str) -> Dict[str, Any]:
 async def _list_tools_with_fallback(server_name: str) -> Dict[str, Any]:
     """Fallback реализация через прямое взаимодействие с MCP сервером по JSON-RPC"""
     try:
-        # Проверяем, что бинарь доступен (абсолютный путь или в PATH)
+        # Определяем команду для запуска сервера
+        # Сначала проверяем, доступен ли бинарь напрямую
         resolved = server_name if os.path.isabs(server_name) else shutil.which(server_name)
+        
+        # Если бинарь не найден, пытаемся использовать npx с соответствующим пакетом
         if not resolved:
-            raise FileNotFoundError(f"MCP server '{server_name}' not found in PATH")
+            # Определяем npm пакет на основе имени сервера
+            if "google" in server_name.lower() or "search" in server_name.lower():
+                npm_package = "@mcp-server/google-search-mcp"
+                # Используем npx для запуска
+                resolved = "npx"
+                npx_args = ["-y", npm_package]
+            elif "filesystem" in server_name.lower():
+                npm_package = "@modelcontextprotocol/server-filesystem"
+                resolved = "npx"
+                npx_args = ["-y", npm_package]
+            else:
+                raise FileNotFoundError(f"MCP server '{server_name}' not found in PATH and no npx package available")
+        else:
+            npx_args = None
 
         # Запускаем MCP сервер как subprocess
-        process = await asyncio.create_subprocess_exec(
-            resolved,
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
+        if npx_args:
+            # Используем npx для запуска
+            process = await asyncio.create_subprocess_exec(
+                resolved,
+                *npx_args,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+        else:
+            # Используем прямой бинарь
+            process = await asyncio.create_subprocess_exec(
+                resolved,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
         
         if not process.stdin or not process.stdout:
             raise RuntimeError("Failed to create subprocess pipes")
@@ -205,9 +232,11 @@ async def list_mcp_tools(server_name: str) -> Dict[str, Any]:
             f"Server '{server_name}' not found. Make sure it's installed and available in PATH.\n\n"
             f"To install MCP servers, you can:\n"
             f"1. Install via npm: {install_cmd}\n"
-            f"2. Or use the MCP server's installation instructions\n"
-            f"3. Make sure the server binary is in your PATH\n\n"
-            f"You can check if it's installed by running: which {server_name}"
+            f"2. Or use npx to run without installation: npx -y {npm_package if npm_package else '<package-name>'}\n"
+            f"3. Or use the MCP server's installation instructions\n"
+            f"4. Make sure the server binary is in your PATH\n\n"
+            f"You can check if it's installed by running: which {server_name}\n"
+            f"Or try running with npx: npx -y {npm_package if npm_package else '<package-name>'}"
         )
         return {
             "name": server_name,
