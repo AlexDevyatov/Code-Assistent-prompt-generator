@@ -31,10 +31,23 @@ def _extract_weather_intent(prompt: str) -> Optional[Dict[str, Any]]:
     """
     prompt_lower = prompt.lower()
     
-    # Проверяем, есть ли запрос о погоде
-    weather_keywords = ["погода", "weather", "температура", "temperature", "дождь", "rain", 
-                       "снег", "snow", "ветер", "wind", "прогноз", "forecast"]
+    # Расширенный список ключевых слов для определения запросов о погоде
+    weather_keywords = [
+        "погода", "weather", "температура", "temperature", "temp", 
+        "дождь", "rain", "дожд", "raining", "rainy",
+        "снег", "snow", "снеж", "snowing", "snowy",
+        "ветер", "wind", "ветр", "windy",
+        "прогноз", "forecast", "прогноз погоды", "weather forecast",
+        "облачно", "cloudy", "облака", "clouds",
+        "солнечно", "sunny", "солнце", "sun",
+        "туман", "fog", "туманно", "foggy",
+        "град", "hail", "гроза", "thunderstorm",
+        "влажность", "humidity", "давление", "pressure",
+        "осадки", "precipitation", "осадк",
+        "климат", "climate", "метео", "meteo"
+    ]
     
+    # Проверяем, есть ли запрос о погоде
     if not any(keyword in prompt_lower for keyword in weather_keywords):
         return None
     
@@ -55,32 +68,44 @@ def _extract_weather_intent(prompt: str) -> Optional[Dict[str, Any]]:
         intent["type"] = "current"
     
     # Извлекаем местоположение
-    # Убираем ключевые слова и ищем названия городов
+    # Улучшенные паттерны для поиска названий городов
     location_patterns = [
-        r'в\s+([А-ЯЁа-яёA-Za-z\s]+?)(?:\s|$|,|\.)',
-        r'для\s+([А-ЯЁа-яёA-Za-z\s]+?)(?:\s|$|,|\.)',
-        r'([А-ЯЁа-яёA-Z][а-яё]+)\s+(?:погода|weather)',
+        r'в\s+([А-ЯЁа-яёA-Z][А-ЯЁа-яёA-Za-z\s\-]+?)(?:\s|$|,|\.|\?)',
+        r'для\s+([А-ЯЁа-яёA-Z][А-ЯЁа-яёA-Za-z\s\-]+?)(?:\s|$|,|\.|\?)',
+        r'([А-ЯЁа-яёA-Z][а-яёA-Za-z\s\-]+?)\s+(?:погода|weather|прогноз|forecast)',
+        r'погода\s+в\s+([А-ЯЁа-яёA-Z][А-ЯЁа-яёA-Za-z\s\-]+?)(?:\s|$|,|\.|\?)',
+        r'weather\s+in\s+([A-Z][A-Za-z\s\-]+?)(?:\s|$|,|\.|\?)',
+        r'погода\s+([А-ЯЁа-яёA-Z][А-ЯЁа-яёA-Za-z\s\-]+?)(?:\s|$|,|\.|\?)',
+    ]
+    
+    # Список слов для исключения
+    exclude_words = [
+        "какая", "какой", "какое", "какие", "the", "a", "an", "в", "для", 
+        "на", "по", "с", "о", "об", "про", "как", "что", "где", "когда"
     ]
     
     for pattern in location_patterns:
         match = re.search(pattern, prompt_lower)
         if match:
             location = match.group(1).strip()
-            # Фильтруем общие слова
-            if location and len(location) > 2 and location not in ["какая", "какой", "какое", "the", "a"]:
+            # Фильтруем общие слова и проверяем длину
+            if (location and len(location) > 2 and 
+                location.lower() not in exclude_words and
+                not any(location.lower().startswith(excl) for excl in exclude_words)):
                 intent["location"] = location
                 break
     
-    # Если местоположение не найдено, пробуем найти название города в начале или конце
+    # Если местоположение не найдено, пробуем найти название города в тексте
     if not intent["location"]:
         words = prompt.split()
-        # Берем первое слово с заглавной буквы как возможное название города
+        # Берем слова с заглавной буквы как возможные названия городов
         for word in words:
-            if word and word[0].isupper() and len(word) > 2:
-                # Проверяем, что это не ключевое слово
-                if word.lower() not in ["погода", "weather", "прогноз", "forecast", "температура", "temperature"]:
-                    intent["location"] = word
-                    break
+            # Убираем знаки препинания
+            clean_word = word.strip('.,!?;:()[]{}"\'')
+            if (clean_word and clean_word[0].isupper() and len(clean_word) > 2 and
+                clean_word.lower() not in weather_keywords + exclude_words):
+                intent["location"] = clean_word
+                break
     
     return intent
 
@@ -112,10 +137,12 @@ async def _get_weather_data(intent: Dict[str, Any]) -> Optional[str]:
         else:
             tool_name = "get_current_weather"
         
+        # Всегда передаем location, даже если оно не указано (MCP сервер может использовать дефолтное)
         if intent["location"]:
             arguments["location"] = intent["location"]
+        # Если местоположение не указано, MCP сервер может использовать дефолтное или вернуть ошибку
         
-        # Вызываем инструмент
+        # Вызываем инструмент MCP - это обязательно для запросов о погоде
         logger.info(f"Calling MCP tool {tool_name} with arguments: {arguments}")
         result = await call_mcp_tool(WEATHER_MCP_SERVER, tool_name, arguments)
         
@@ -176,7 +203,8 @@ async def weather_chat(request: WeatherChatRequest):
             else:
                 raise HTTPException(status_code=500, detail="Unexpected response format from DeepSeek API")
         
-        # Получаем данные о погоде через MCP
+        # Получаем данные о погоде через MCP (обязательно для запросов о погоде)
+        logger.info(f"Weather intent detected: {intent}, calling MCP server")
         weather_data = await _get_weather_data(intent)
         
         if weather_data:
