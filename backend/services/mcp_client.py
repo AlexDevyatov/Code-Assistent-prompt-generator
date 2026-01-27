@@ -177,10 +177,26 @@ async def list_mcp_tools(server_name: str) -> Dict[str, Any]:
             
     except FileNotFoundError:
         logger.error(f"MCP server '{server_name}' not found. Make sure it's installed and in PATH.")
+        
+        # Определяем npm пакет на основе имени сервера
+        npm_package = None
+        if "http" in server_name.lower():
+            npm_package = "@modelcontextprotocol/server-http"
+        elif "google" in server_name.lower() or "search" in server_name.lower():
+            npm_package = "@modelcontextprotocol/server-google-search"
+        elif "filesystem" in server_name.lower():
+            npm_package = "@modelcontextprotocol/server-filesystem"
+        else:
+            # Пытаемся угадать из имени сервера
+            server_part = server_name.replace("mcp-server-", "").replace("mcp_", "")
+            npm_package = f"@modelcontextprotocol/server-{server_part}"
+        
+        install_cmd = f"npm install -g {npm_package}" if npm_package else "npm install -g @modelcontextprotocol/server-<name>"
+        
         error_msg = (
             f"Server '{server_name}' not found. Make sure it's installed and available in PATH.\n\n"
             f"To install MCP servers, you can:\n"
-            f"1. Install via npm: npm install -g @modelcontextprotocol/server-google-search\n"
+            f"1. Install via npm: {install_cmd}\n"
             f"2. Or use the MCP server's installation instructions\n"
             f"3. Make sure the server binary is in your PATH\n\n"
             f"You can check if it's installed by running: which {server_name}"
