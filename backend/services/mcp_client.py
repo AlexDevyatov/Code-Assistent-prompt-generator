@@ -2,6 +2,8 @@
 import logging
 import json
 import asyncio
+import os
+import shutil
 from typing import Dict, Any
 
 logger = logging.getLogger(__name__)
@@ -50,9 +52,14 @@ async def _list_tools_with_sdk(server_name: str) -> Dict[str, Any]:
 async def _list_tools_with_fallback(server_name: str) -> Dict[str, Any]:
     """Fallback реализация через прямое взаимодействие с MCP сервером по JSON-RPC"""
     try:
+        # Проверяем, что бинарь доступен (абсолютный путь или в PATH)
+        resolved = server_name if os.path.isabs(server_name) else shutil.which(server_name)
+        if not resolved:
+            raise FileNotFoundError(f"MCP server '{server_name}' not found in PATH")
+
         # Запускаем MCP сервер как subprocess
         process = await asyncio.create_subprocess_exec(
-            server_name,
+            resolved,
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
@@ -138,6 +145,9 @@ async def _list_tools_with_fallback(server_name: str) -> Dict[str, Any]:
         
         return server_info
         
+    except FileNotFoundError:
+        # Пробрасываем выше, чтобы сработала дружественная обработка в list_mcp_tools
+        raise
     except asyncio.TimeoutError:
         raise RuntimeError("Timeout waiting for MCP server response")
     except json.JSONDecodeError as e:
