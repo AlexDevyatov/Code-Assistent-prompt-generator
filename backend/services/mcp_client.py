@@ -198,12 +198,14 @@ async def _list_tools_with_fallback(server_name: str) -> Dict[str, Any]:
         if npx_args:
             # Используем npx для запуска
             try:
+                # Используем unbuffered режим для stdout/stderr
                 process = await asyncio.create_subprocess_exec(
                     resolved,
                     *npx_args,
                     stdin=asyncio.subprocess.PIPE,
                     stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE
+                    stderr=asyncio.subprocess.PIPE,
+                    env={**os.environ, "PYTHONUNBUFFERED": "1"} if "python" in resolved.lower() else os.environ
                 )
             except Exception as e:
                 logger.warning(f"Failed to start with npx: {e}")
@@ -211,11 +213,13 @@ async def _list_tools_with_fallback(server_name: str) -> Dict[str, Any]:
         else:
             # Используем прямой бинарь, но если не получается, пробуем npx
             try:
+                # Используем unbuffered режим для stdout/stderr
                 process = await asyncio.create_subprocess_exec(
                     resolved,
                     stdin=asyncio.subprocess.PIPE,
                     stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE
+                    stderr=asyncio.subprocess.PIPE,
+                    env={**os.environ, "PYTHONUNBUFFERED": "1"} if "python" in resolved.lower() else os.environ
                 )
             except (FileNotFoundError, OSError) as e:
                 # Если прямой запуск не удался, пробуем через npx
@@ -238,6 +242,23 @@ async def _list_tools_with_fallback(server_name: str) -> Dict[str, Any]:
         if not process or not process.stdin or not process.stdout:
             raise RuntimeError("Failed to create subprocess pipes")
         
+        # Даем процессу немного времени на запуск
+        await asyncio.sleep(0.5)
+        
+        # Проверяем, не завершился ли процесс с ошибкой
+        if process.returncode is not None:
+            # Процесс уже завершился, читаем stderr
+            stderr_output = b""
+            if process.stderr:
+                try:
+                    stderr_output = await asyncio.wait_for(process.stderr.read(), timeout=1.0)
+                except asyncio.TimeoutError:
+                    pass
+            error_msg = stderr_output.decode('utf-8', errors='ignore') if stderr_output else "Unknown error"
+            raise RuntimeError(f"MCP server process exited with code {process.returncode}: {error_msg}")
+        
+        logger.info(f"MCP server process started, PID: {process.pid}")
+        
         # Отправляем initialize запрос (JSON-RPC 2.0)
         init_request = {
             "jsonrpc": "2.0",
@@ -254,16 +275,37 @@ async def _list_tools_with_fallback(server_name: str) -> Dict[str, Any]:
         }
         
         init_message = json.dumps(init_request) + "\n"
+        logger.debug(f"Sending initialize request: {init_message.strip()}")
         process.stdin.write(init_message.encode('utf-8'))
         await process.stdin.drain()
         
-        # Читаем ответ на initialize
-        init_response_line = await asyncio.wait_for(
-            process.stdout.readline(), timeout=5.0
-        )
-        if not init_response_line:
-            raise RuntimeError("No response from server")
+        # Читаем ответ на initialize с увеличенным таймаутом
+        try:
+            init_response_line = await asyncio.wait_for(
+                process.stdout.readline(), timeout=10.0
+            )
+            if not init_response_line:
+                # Проверяем stderr на наличие ошибок
+                stderr_output = b""
+                if process.stderr:
+                    try:
+                        stderr_output = await asyncio.wait_for(process.stderr.read(), timeout=1.0)
+                    except asyncio.TimeoutError:
+                        pass
+                error_msg = stderr_output.decode('utf-8', errors='ignore') if stderr_output else "No output"
+                raise RuntimeError(f"No response from server. Stderr: {error_msg}")
+        except asyncio.TimeoutError:
+            # Проверяем stderr на наличие ошибок
+            stderr_output = b""
+            if process.stderr:
+                try:
+                    stderr_output = await asyncio.wait_for(process.stderr.read(), timeout=1.0)
+                except asyncio.TimeoutError:
+                    pass
+            error_msg = stderr_output.decode('utf-8', errors='ignore') if stderr_output else "Timeout waiting for response"
+            raise RuntimeError(f"Timeout waiting for server response. Stderr: {error_msg}")
         
+        logger.debug(f"Received initialize response: {init_response_line.decode('utf-8', errors='ignore')[:200]}")
         init_response = json.loads(init_response_line.decode('utf-8'))
         
         # Отправляем initialized notification
@@ -282,15 +324,35 @@ async def _list_tools_with_fallback(server_name: str) -> Dict[str, Any]:
             "params": {}
         }
         
+        logger.debug(f"Sending tools/list request")
         process.stdin.write((json.dumps(tools_request) + "\n").encode('utf-8'))
         await process.stdin.drain()
         
-        # Читаем ответ
-        tools_response_line = await asyncio.wait_for(
-            process.stdout.readline(), timeout=5.0
-        )
-        if not tools_response_line:
-            raise RuntimeError("No response to tools/list request")
+        # Читаем ответ с увеличенным таймаутом
+        try:
+            tools_response_line = await asyncio.wait_for(
+                process.stdout.readline(), timeout=10.0
+            )
+            if not tools_response_line:
+                # Проверяем stderr на наличие ошибок
+                stderr_output = b""
+                if process.stderr:
+                    try:
+                        stderr_output = await asyncio.wait_for(process.stderr.read(), timeout=1.0)
+                    except asyncio.TimeoutError:
+                        pass
+                error_msg = stderr_output.decode('utf-8', errors='ignore') if stderr_output else "No output"
+                raise RuntimeError(f"No response to tools/list request. Stderr: {error_msg}")
+        except asyncio.TimeoutError:
+            # Проверяем stderr на наличие ошибок
+            stderr_output = b""
+            if process.stderr:
+                try:
+                    stderr_output = await asyncio.wait_for(process.stderr.read(), timeout=1.0)
+                except asyncio.TimeoutError:
+                    pass
+            error_msg = stderr_output.decode('utf-8', errors='ignore') if stderr_output else "Timeout waiting for response"
+            raise RuntimeError(f"Timeout waiting for tools/list response. Stderr: {error_msg}")
         
         tools_response = json.loads(tools_response_line.decode('utf-8'))
         
