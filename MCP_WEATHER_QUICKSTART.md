@@ -6,10 +6,10 @@
 
 ```bash
 cd /path/to/MCP-Weather
-python3 server_remote.py --host 0.0.0.0 --port 8001
+python3 server_remote.py --host 0.0.0.0 --port 9001
 ```
 
-Сервер будет доступен по адресу: `http://localhost:8001` (или `http://ваш-ip:8001`)
+Сервер будет доступен по адресу: `http://localhost:9001` (или `http://127.0.0.1:9001`)
 
 ### Вариант B: Локальный stdio сервер
 
@@ -23,7 +23,7 @@ python3 server.py
 Файл `.env` уже обновлен с настройками по умолчанию:
 
 ```env
-MCP_WEATHER_SERVER_URL=http://185.28.85.26:8001
+MCP_WEATHER_SERVER_URL=http://127.0.0.1:9001
 MCP_USE_HTTP=true
 ```
 
@@ -31,10 +31,10 @@ MCP_USE_HTTP=true
 
 ```env
 # Для локального сервера:
-MCP_WEATHER_SERVER_URL=http://localhost:8001
+MCP_WEATHER_SERVER_URL=http://localhost:9001
 
-# Для удаленного сервера:
-MCP_WEATHER_SERVER_URL=http://ваш-ip:8001
+# Для сервера на той же машине (как у backend):
+MCP_WEATHER_SERVER_URL=http://127.0.0.1:9001
 ```
 
 ## ▶️ Шаг 3: Запустите DeepseekWebClient
@@ -73,7 +73,7 @@ curl -X POST "http://localhost:8000/api/weather-chat" \
 
 1. Проверьте, что MCP-Weather сервер запущен:
    ```bash
-   curl http://localhost:8001/health
+   curl http://localhost:9001/health
    ```
 
 2. Проверьте логи MCP-Weather сервера

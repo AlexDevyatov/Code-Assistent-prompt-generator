@@ -22,17 +22,11 @@
    python3 server_remote.py
    ```
    
-   Сервер должен быть доступен по адресу, например: `http://localhost:8001` или `http://ваш-ip:8001`
+   Сервер должен быть доступен по адресу, например: `http://127.0.0.1:9001`
 
 2. **Настройте переменные окружения** в файле `.env`:
    ```env
-   MCP_WEATHER_SERVER_URL=http://localhost:8001
-   MCP_USE_HTTP=true
-   ```
-   
-   Или для удаленного сервера:
-   ```env
-   MCP_WEATHER_SERVER_URL=http://185.28.85.26:8001
+   MCP_WEATHER_SERVER_URL=http://127.0.0.1:9001
    MCP_USE_HTTP=true
    ```
 
@@ -133,10 +127,10 @@ curl http://localhost:8000/api/mcp/list-tools/mcp-weather
 
 ```bash
 # Проверить доступность сервера
-curl http://localhost:8001
+curl http://127.0.0.1:9001
 
 # Проверить JSON-RPC endpoint
-curl -X POST http://localhost:8001 \
+curl -X POST http://127.0.0.1:9001 \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",

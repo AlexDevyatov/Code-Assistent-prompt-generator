@@ -13,7 +13,8 @@ try:
     from backend.config import MCP_WEATHER_SERVER_URL, MCP_USE_HTTP
 except ImportError:
     # Если конфигурация не доступна, используем значения по умолчанию
-    MCP_WEATHER_SERVER_URL = os.getenv("MCP_WEATHER_SERVER_URL", "http://185.28.85.26:8001")
+    # MCP Weather server развернут рядом с backend (тот же хост), порт 9001.
+    MCP_WEATHER_SERVER_URL = os.getenv("MCP_WEATHER_SERVER_URL", "http://127.0.0.1:9001")
     MCP_USE_HTTP = os.getenv("MCP_USE_HTTP", "true").lower() == "true"
 
 logger = logging.getLogger(__name__)
