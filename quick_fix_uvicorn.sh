@@ -51,37 +51,52 @@ else
 fi
 echo ""
 
-# Активация и установка зависимостей
+# Установка зависимостей (используем явный путь к pip в venv)
 echo -e "${YELLOW}2. Установка зависимостей...${NC}"
-source venv/bin/activate
+
+# Используем явный путь к pip в venv, чтобы избежать проблем с externally-managed-environment
+VENV_PIP="$PROJECT_DIR/venv/bin/pip"
+VENV_PYTHON="$PROJECT_DIR/venv/bin/python"
+
+# Проверяем, что venv/bin/python существует
+if [ ! -f "$VENV_PYTHON" ]; then
+    echo -e "${RED}❌ Python в venv не найден: $VENV_PYTHON${NC}"
+    echo -e "${YELLOW}Пересоздаю venv...${NC}"
+    rm -rf venv
+    python3 -m venv venv
+    VENV_PIP="$PROJECT_DIR/venv/bin/pip"
+    VENV_PYTHON="$PROJECT_DIR/venv/bin/python"
+fi
 
 # Проверка наличия uvicorn
-if [ ! -f "venv/bin/uvicorn" ]; then
+if [ ! -f "$PROJECT_DIR/venv/bin/uvicorn" ]; then
     echo -e "${YELLOW}   uvicorn не найден, устанавливаю зависимости...${NC}"
-    pip install -r requirements.txt
+    # Используем явный путь к pip в venv
+    "$VENV_PIP" install --upgrade pip setuptools wheel
+    "$VENV_PIP" install -r requirements.txt
     echo -e "${GREEN}✅ Зависимости установлены${NC}"
 else
     echo -e "${GREEN}✅ uvicorn уже установлен${NC}"
     # Все равно обновляем зависимости на случай изменений
     echo -e "${YELLOW}   Обновление зависимостей...${NC}"
-    pip install -r requirements.txt --quiet 2>/dev/null || pip install -r requirements.txt
+    "$VENV_PIP" install --upgrade pip setuptools wheel --quiet 2>/dev/null || true
+    "$VENV_PIP" install -r requirements.txt --quiet 2>/dev/null || "$VENV_PIP" install -r requirements.txt
 fi
 
 # Проверка, что uvicorn теперь существует
-if [ ! -f "venv/bin/uvicorn" ]; then
+if [ ! -f "$PROJECT_DIR/venv/bin/uvicorn" ]; then
     echo -e "${RED}❌ ОШИБКА: uvicorn все еще не найден после установки${NC}"
     echo -e "${YELLOW}Проверьте requirements.txt и установку pip${NC}"
-    deactivate
+    echo -e "${YELLOW}Попробуйте вручную:${NC}"
+    echo -e "   $VENV_PIP install -r requirements.txt"
     exit 1
 fi
 
 # Убеждаемся, что uvicorn исполняемый
-chmod +x venv/bin/uvicorn
+chmod +x "$PROJECT_DIR/venv/bin/uvicorn"
 
-echo -e "${GREEN}✅ uvicorn найден: $(which uvicorn)${NC}"
-echo -e "${BLUE}   Версия: $(uvicorn --version 2>/dev/null || echo 'неизвестна')${NC}"
-
-deactivate
+echo -e "${GREEN}✅ uvicorn найден: $PROJECT_DIR/venv/bin/uvicorn${NC}"
+echo -e "${BLUE}   Версия: $($PROJECT_DIR/venv/bin/uvicorn --version 2>/dev/null || echo 'неизвестна')${NC}"
 echo ""
 
 # Проверка systemd сервиса

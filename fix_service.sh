@@ -86,16 +86,29 @@ if [ ! -d "venv" ]; then
     python3 -m venv venv
 fi
 echo -e "${GREEN}✅ venv${NC}"
-source venv/bin/activate
 echo ""
 
 echo -e "${YELLOW}3. Зависимости и uvicorn${NC}"
+VENV_PIP="$PROJECT_DIR/venv/bin/pip"
+VENV_PYTHON="$PROJECT_DIR/venv/bin/python"
+
+# Проверяем, что venv/bin/python существует
+if [ ! -f "$VENV_PYTHON" ]; then
+    echo -e "${YELLOW}   Пересоздаю venv (Python не найден)...${NC}"
+    rm -rf venv
+    python3 -m venv venv
+    VENV_PIP="$PROJECT_DIR/venv/bin/pip"
+    VENV_PYTHON="$PROJECT_DIR/venv/bin/python"
+fi
+
 if [ ! -f "venv/bin/uvicorn" ]; then
-    pip install -r requirements.txt --quiet 2>/dev/null || pip install -r requirements.txt
+    echo -e "${YELLOW}   Устанавливаю зависимости...${NC}"
+    # Используем явный путь к pip в venv, чтобы избежать проблем с externally-managed-environment
+    "$VENV_PIP" install --upgrade pip setuptools wheel --quiet 2>/dev/null || "$VENV_PIP" install --upgrade pip setuptools wheel
+    "$VENV_PIP" install -r requirements.txt --quiet 2>/dev/null || "$VENV_PIP" install -r requirements.txt
 fi
 [ -x "venv/bin/uvicorn" ] || chmod +x venv/bin/uvicorn
 echo -e "${GREEN}✅ uvicorn${NC}"
-deactivate
 echo ""
 
 echo -e "${YELLOW}4. backend/main.py${NC}"
