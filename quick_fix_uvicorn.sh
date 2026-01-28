@@ -40,47 +40,129 @@ if [ ! -f "requirements.txt" ]; then
     exit 1
 fi
 
+# Функция для проверки, работает ли pip
+check_pip_works() {
+    local pip_path="$1"
+    if [ ! -f "$pip_path" ]; then
+        return 1
+    fi
+    # Пробуем выполнить pip и проверяем на ошибку "cannot execute"
+    if ! "$pip_path" --version >/dev/null 2>&1; then
+        return 1
+    fi
+    # Дополнительная проверка: пробуем выполнить и проверить stderr на "cannot execute"
+    local error_output
+    error_output=$("$pip_path" --version 2>&1 >/dev/null)
+    if echo "$error_output" | grep -q "cannot execute\|required file not found"; then
+        return 1
+    fi
+    return 0
+}
+
 # Создание/проверка виртуального окружения
 echo -e "${YELLOW}1. Проверка виртуального окружения...${NC}"
+
+VENV_PIP="$PROJECT_DIR/venv/bin/pip"
+VENV_PYTHON="$PROJECT_DIR/venv/bin/python"
+
+# Проверяем, нужно ли пересоздать venv
+NEED_RECREATE=false
+
 if [ ! -d "venv" ]; then
-    echo -e "${YELLOW}   Создание venv...${NC}"
+    echo -e "${YELLOW}   venv не найден, создаю...${NC}"
+    NEED_RECREATE=true
+elif [ ! -f "$VENV_PYTHON" ]; then
+    echo -e "${YELLOW}   Python в venv не найден, пересоздаю...${NC}"
+    NEED_RECREATE=true
+elif [ ! -f "$VENV_PIP" ]; then
+    echo -e "${YELLOW}   pip в venv не найден, пересоздаю...${NC}"
+    NEED_RECREATE=true
+elif ! check_pip_works "$VENV_PIP"; then
+    echo -e "${YELLOW}   pip в venv не работает (возможно, venv создан на другой системе или поврежден), пересоздаю...${NC}"
+    NEED_RECREATE=true
+fi
+
+if [ "$NEED_RECREATE" = true ]; then
+    echo -e "${YELLOW}   Удаляю старый venv...${NC}"
+    rm -rf venv
+    echo -e "${YELLOW}   Создаю новый venv...${NC}"
     python3 -m venv venv
-    echo -e "${GREEN}✅ venv создан${NC}"
+    VENV_PIP="$PROJECT_DIR/venv/bin/pip"
+    VENV_PYTHON="$PROJECT_DIR/venv/bin/python"
+    
+    # Проверяем, что новый venv работает
+    sleep 1  # Даем время на создание файлов
+    if [ ! -f "$VENV_PIP" ] || ! check_pip_works "$VENV_PIP"; then
+        echo -e "${RED}❌ ОШИБКА: Не удалось создать рабочий venv${NC}"
+        echo -e "${YELLOW}Проверьте установку Python3 и python3-venv:${NC}"
+        echo -e "   sudo apt install python3 python3-pip python3-venv"
+        exit 1
+    fi
+    echo -e "${GREEN}✅ venv создан и работает${NC}"
 else
-    echo -e "${GREEN}✅ venv существует${NC}"
+    echo -e "${GREEN}✅ venv существует и работает${NC}"
 fi
 echo ""
 
 # Установка зависимостей (используем явный путь к pip в venv)
 echo -e "${YELLOW}2. Установка зависимостей...${NC}"
 
-# Используем явный путь к pip в venv, чтобы избежать проблем с externally-managed-environment
-VENV_PIP="$PROJECT_DIR/venv/bin/pip"
-VENV_PYTHON="$PROJECT_DIR/venv/bin/python"
-
-# Проверяем, что venv/bin/python существует
-if [ ! -f "$VENV_PYTHON" ]; then
-    echo -e "${RED}❌ Python в venv не найден: $VENV_PYTHON${NC}"
-    echo -e "${YELLOW}Пересоздаю venv...${NC}"
-    rm -rf venv
-    python3 -m venv venv
-    VENV_PIP="$PROJECT_DIR/venv/bin/pip"
-    VENV_PYTHON="$PROJECT_DIR/venv/bin/python"
-fi
-
 # Проверка наличия uvicorn
 if [ ! -f "$PROJECT_DIR/venv/bin/uvicorn" ]; then
     echo -e "${YELLOW}   uvicorn не найден, устанавливаю зависимости...${NC}"
     # Используем явный путь к pip в venv
-    "$VENV_PIP" install --upgrade pip setuptools wheel
-    "$VENV_PIP" install -r requirements.txt
+    # Проверяем еще раз перед использованием (на случай, если venv был поврежден)
+    if ! check_pip_works "$VENV_PIP"; then
+        echo -e "${YELLOW}   pip не работает, пересоздаю venv...${NC}"
+        rm -rf venv
+        python3 -m venv venv
+        VENV_PIP="$PROJECT_DIR/venv/bin/pip"
+        sleep 1
+    fi
+    
+    if ! "$VENV_PIP" install --upgrade pip setuptools wheel 2>&1; then
+        echo -e "${RED}❌ ОШИБКА: Не удалось обновить pip${NC}"
+        echo -e "${YELLOW}Пересоздаю venv...${NC}"
+        rm -rf venv
+        python3 -m venv venv
+        VENV_PIP="$PROJECT_DIR/venv/bin/pip"
+        sleep 1
+        if ! "$VENV_PIP" install --upgrade pip setuptools wheel 2>&1; then
+            echo -e "${RED}❌ КРИТИЧЕСКАЯ ОШИБКА: Не удалось установить pip даже после пересоздания venv${NC}"
+            echo -e "${YELLOW}Проверьте установку Python3:${NC}"
+            echo -e "   python3 --version"
+            echo -e "   sudo apt install python3 python3-pip python3-venv"
+            exit 1
+        fi
+    fi
+    if ! "$VENV_PIP" install -r requirements.txt 2>&1; then
+        echo -e "${RED}❌ ОШИБКА: Не удалось установить зависимости${NC}"
+        exit 1
+    fi
     echo -e "${GREEN}✅ Зависимости установлены${NC}"
 else
     echo -e "${GREEN}✅ uvicorn уже установлен${NC}"
     # Все равно обновляем зависимости на случай изменений
     echo -e "${YELLOW}   Обновление зависимостей...${NC}"
-    "$VENV_PIP" install --upgrade pip setuptools wheel --quiet 2>/dev/null || true
-    "$VENV_PIP" install -r requirements.txt --quiet 2>/dev/null || "$VENV_PIP" install -r requirements.txt
+    # Проверяем, что pip работает перед использованием
+    if ! check_pip_works "$VENV_PIP"; then
+        echo -e "${YELLOW}   pip не работает, пересоздаю venv...${NC}"
+        rm -rf venv
+        python3 -m venv venv
+        VENV_PIP="$PROJECT_DIR/venv/bin/pip"
+        sleep 1
+        "$VENV_PIP" install --upgrade pip setuptools wheel
+        "$VENV_PIP" install -r requirements.txt
+    else
+        if ! "$VENV_PIP" install --upgrade pip setuptools wheel --quiet 2>/dev/null; then
+            echo -e "${YELLOW}   Предупреждение: не удалось обновить pip тихо, пробую с выводом...${NC}"
+            "$VENV_PIP" install --upgrade pip setuptools wheel || true
+        fi
+        if ! "$VENV_PIP" install -r requirements.txt --quiet 2>/dev/null; then
+            echo -e "${YELLOW}   Предупреждение: не удалось обновить зависимости тихо, пробую с выводом...${NC}"
+            "$VENV_PIP" install -r requirements.txt
+        fi
+    fi
 fi
 
 # Проверка, что uvicorn теперь существует
