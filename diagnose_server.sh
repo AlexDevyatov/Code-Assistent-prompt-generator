@@ -99,12 +99,68 @@ else
 fi
 echo ""
 
-# 8. Проверка конфигурации systemd
-echo -e "${YELLOW}8. Проверка конфигурации systemd...${NC}"
+# 8. Проверка виртуального окружения и uvicorn
+echo -e "${YELLOW}8. Проверка виртуального окружения...${NC}"
+PROJECT_DIR="${PROJECT_DIR:-/opt/Code-Assistent-prompt-generator}"
+if [ ! -d "$PROJECT_DIR" ]; then
+    PROJECT_DIR="$(pwd)"
+fi
+
+if [ -d "$PROJECT_DIR/venv" ]; then
+    echo -e "${GREEN}✅ Виртуальное окружение найдено: $PROJECT_DIR/venv${NC}"
+    
+    if [ -f "$PROJECT_DIR/venv/bin/uvicorn" ]; then
+        echo -e "${GREEN}✅ uvicorn найден в venv${NC}"
+        echo -e "${BLUE}Версия uvicorn:${NC}"
+        "$PROJECT_DIR/venv/bin/uvicorn" --version 2>/dev/null || echo "Не удалось определить версию"
+    else
+        echo -e "${RED}❌ uvicorn НЕ найден в venv/bin/uvicorn${NC}"
+        echo -e "${YELLOW}💡 Установите зависимости:${NC}"
+        echo -e "   cd $PROJECT_DIR"
+        echo -e "   source venv/bin/activate"
+        echo -e "   pip install -r requirements.txt"
+    fi
+    
+    if [ -f "$PROJECT_DIR/venv/bin/python" ]; then
+        echo -e "${GREEN}✅ Python найден в venv${NC}"
+        echo -e "${BLUE}Версия Python:${NC}"
+        "$PROJECT_DIR/venv/bin/python" --version 2>/dev/null || echo "Не удалось определить версию"
+    else
+        echo -e "${RED}❌ Python НЕ найден в venv${NC}"
+        echo -e "${YELLOW}💡 Пересоздайте venv:${NC}"
+        echo -e "   cd $PROJECT_DIR"
+        echo -e "   rm -rf venv"
+        echo -e "   python3 -m venv venv"
+    fi
+else
+    echo -e "${RED}❌ Виртуальное окружение НЕ найдено: $PROJECT_DIR/venv${NC}"
+    echo -e "${YELLOW}💡 Создайте venv:${NC}"
+    echo -e "   cd $PROJECT_DIR"
+    echo -e "   python3 -m venv venv"
+    echo -e "   source venv/bin/activate"
+    echo -e "   pip install -r requirements.txt"
+fi
+echo ""
+
+# 9. Проверка конфигурации systemd
+echo -e "${YELLOW}9. Проверка конфигурации systemd...${NC}"
 if [ -f "/etc/systemd/system/deepseek-web-client.service" ]; then
     echo -e "${GREEN}✅ Файл сервиса найден${NC}"
     echo -e "${BLUE}Проверка ExecStart:${NC}"
-    grep "ExecStart" /etc/systemd/system/deepseek-web-client.service | head -1
+    EXEC_START=$(grep "ExecStart" /etc/systemd/system/deepseek-web-client.service | head -1)
+    echo "   $EXEC_START"
+    
+    # Извлекаем путь к uvicorn из ExecStart
+    UVICORN_PATH=$(echo "$EXEC_START" | sed -n 's/.*ExecStart=\([^ ]*\).*/\1/p')
+    if [ -n "$UVICORN_PATH" ]; then
+        if [ -f "$UVICORN_PATH" ]; then
+            echo -e "${GREEN}✅ Путь к uvicorn существует: $UVICORN_PATH${NC}"
+        else
+            echo -e "${RED}❌ Путь к uvicorn НЕ существует: $UVICORN_PATH${NC}"
+            echo -e "${YELLOW}💡 Это основная проблема! Запустите fix_service.sh для исправления${NC}"
+        fi
+    fi
+    
     echo -e "${BLUE}Проверка WorkingDirectory:${NC}"
     grep "WorkingDirectory" /etc/systemd/system/deepseek-web-client.service | head -1
 else
@@ -113,36 +169,63 @@ else
 fi
 echo ""
 
-# 9. Рекомендации
+# 10. Рекомендации
 echo -e "${BLUE}════════════════════════════════════════${NC}"
 echo -e "${BLUE}💡 Рекомендации:${NC}"
 echo -e "${BLUE}════════════════════════════════════════${NC}"
 
-if ! systemctl is-active --quiet deepseek-web-client 2>/dev/null; then
-    echo -e "${YELLOW}1. Запустите сервис:${NC}"
-    echo -e "   sudo systemctl start deepseek-web-client"
+# Проверяем основную проблему - отсутствие uvicorn
+PROJECT_DIR="${PROJECT_DIR:-/opt/Code-Assistent-prompt-generator}"
+if [ ! -d "$PROJECT_DIR" ]; then
+    PROJECT_DIR="$(pwd)"
+fi
+
+if [ ! -f "$PROJECT_DIR/venv/bin/uvicorn" ]; then
+    echo -e "${RED}🔴 ОСНОВНАЯ ПРОБЛЕМА: uvicorn не найден${NC}"
+    echo -e "${YELLOW}1. Запустите скрипт исправления:${NC}"
+    echo -e "   cd $PROJECT_DIR"
+    echo -e "   ./fix_service.sh"
+    echo ""
+    echo -e "${YELLOW}   Или исправьте вручную:${NC}"
+    echo -e "   cd $PROJECT_DIR"
+    if [ ! -d "venv" ]; then
+        echo -e "   python3 -m venv venv"
+    fi
+    echo -e "   source venv/bin/activate"
+    echo -e "   pip install -r requirements.txt"
+    echo -e "   deactivate"
+    echo -e "   sudo systemctl daemon-reload"
+    echo -e "   sudo systemctl restart deepseek-web-client"
     echo ""
 fi
 
+if ! systemctl is-active --quiet deepseek-web-client 2>/dev/null; then
+    if [ -f "$PROJECT_DIR/venv/bin/uvicorn" ]; then
+        echo -e "${YELLOW}2. Запустите сервис:${NC}"
+        echo -e "   sudo systemctl start deepseek-web-client"
+        echo ""
+    fi
+fi
+
 if command -v ufw &> /dev/null && ! ufw status | grep -q "8000"; then
-    echo -e "${YELLOW}2. Откройте порт в файрволе:${NC}"
+    echo -e "${YELLOW}3. Откройте порт в файрволе:${NC}"
     echo -e "   sudo ufw allow 8000/tcp"
     echo ""
 fi
 
 if [ ! -f ".env" ] || ! grep -q "DEEPSEEK_API_KEY" .env; then
-    echo -e "${YELLOW}3. Создайте .env файл:${NC}"
+    echo -e "${YELLOW}4. Создайте .env файл:${NC}"
     echo -e "   echo 'DEEPSEEK_API_KEY=ваш-ключ' > .env"
     echo ""
 fi
 
 if [ ! -d "static" ] || [ ! -f "static/index.html" ]; then
-    echo -e "${YELLOW}4. Соберите фронтенд:${NC}"
+    echo -e "${YELLOW}5. Соберите фронтенд:${NC}"
     echo -e "   npm run build"
     echo ""
 fi
 
-echo -e "${YELLOW}5. Проверьте, что сервис слушает на 0.0.0.0:8000 (не только localhost)${NC}"
+echo -e "${YELLOW}6. Проверьте, что сервис слушает на 0.0.0.0:8000 (не только localhost)${NC}"
 echo -e "   В systemd файле должно быть: --host 0.0.0.0 --port 8000"
 echo ""
 
