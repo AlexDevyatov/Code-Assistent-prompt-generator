@@ -5,6 +5,7 @@ import asyncio
 import os
 import shutil
 from typing import Dict, Any, Optional
+from urllib.parse import urlparse, urlunparse
 import httpx
 
 # Импортируем конфигурацию для HTTP подключения
@@ -627,10 +628,23 @@ async def list_mcp_tools(server_name: str, locale: str = "ru-RU") -> Dict[str, A
     try:
         # Если это weather сервер и используется HTTP, подключаемся через HTTP
         if server_name == "mcp-weather" and MCP_USE_HTTP:
-            logger.info(f"Using HTTP connection to list tools from {MCP_WEATHER_SERVER_URL}")
+            logger.info(f"🌐 Using HTTP connection to list tools from {MCP_WEATHER_SERVER_URL}")
             try:
+                # Для SSE сервера используем endpoint /messages/ для JSON-RPC запросов
+                # Если URL не заканчивается на /messages/, добавляем его
+                server_url = MCP_WEATHER_SERVER_URL
+                if not server_url.endswith("/messages/") and not server_url.endswith("/messages"):
+                    # Проверяем, есть ли уже путь в URL
+                    if not any(part in server_url for part in ["/sse", "/messages", "/health"]):
+                        server_url = f"{server_url.rstrip('/')}/messages/"
+                    else:
+                        # Если есть другой путь, заменяем на /messages/
+                        parsed = urlparse(server_url)
+                        server_url = urlunparse((parsed.scheme, parsed.netloc, "/messages/", "", "", ""))
+                
+                logger.info(f"🌐 Calling MCP Weather server at: {server_url}")
                 result = await _call_mcp_via_http(
-                    MCP_WEATHER_SERVER_URL,
+                    server_url,
                     "tools/list",
                     {},
                     request_id=1
@@ -879,10 +893,23 @@ async def call_mcp_tool(server_name: str, tool_name: str, arguments: Dict[str, A
     try:
         # Если это weather сервер и используется HTTP, подключаемся через HTTP
         if server_name == "mcp-weather" and MCP_USE_HTTP:
-            logger.info(f"Using HTTP connection to call tool {tool_name} on {MCP_WEATHER_SERVER_URL}")
+            logger.info(f"🌐 Using HTTP connection to call tool {tool_name} on {MCP_WEATHER_SERVER_URL}")
             try:
+                # Для SSE сервера используем endpoint /messages/ для JSON-RPC запросов
+                # Если URL не заканчивается на /messages/, добавляем его
+                server_url = MCP_WEATHER_SERVER_URL
+                if not server_url.endswith("/messages/") and not server_url.endswith("/messages"):
+                    # Проверяем, есть ли уже путь в URL
+                    if not any(part in server_url for part in ["/sse", "/messages", "/health"]):
+                        server_url = f"{server_url.rstrip('/')}/messages/"
+                    else:
+                        # Если есть другой путь, заменяем на /messages/
+                        parsed = urlparse(server_url)
+                        server_url = urlunparse((parsed.scheme, parsed.netloc, "/messages/", "", "", ""))
+                
+                logger.info(f"🌐 Calling MCP Weather server at: {server_url}")
                 result = await _call_mcp_via_http(
-                    MCP_WEATHER_SERVER_URL,
+                    server_url,
                     "tools/call",
                     {
                         "name": tool_name,
