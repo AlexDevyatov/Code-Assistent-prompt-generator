@@ -32,7 +32,7 @@ function MCPServer() {
 
     try {
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 60000)
+      const timeoutId = setTimeout(() => controller.abort(new DOMException('Request timeout', 'AbortError')), 60000)
       const response = await fetch(`/api/mcp/list-tools/${encodeURIComponent(serverName)}`, {
         signal: controller.signal,
       })
@@ -50,11 +50,14 @@ function MCPServer() {
         setError(data.error)
       }
     } catch (err) {
+      const name = err instanceof Error ? err.name : ''
       const raw = err instanceof Error ? err.message : 'Failed to fetch MCP tools'
       const errorMessage =
-        raw === 'Failed to fetch' || raw.includes('fetch')
-          ? 'Сервер недоступен или таймаут. Проверьте бэкенд (порт 8000) и прокси /api.'
-          : raw
+        name === 'AbortError' || raw.includes('abort') || raw.includes('timeout')
+          ? 'Таймаут запроса (60 с). Бэкенд или MCP не ответили вовремя.'
+          : raw === 'Failed to fetch' || raw.includes('fetch')
+            ? 'Сервер недоступен. Проверьте бэкенд (порт 8000) и прокси /api.'
+            : raw
       setError(errorMessage)
       console.error('Error fetching MCP tools:', err)
     } finally {

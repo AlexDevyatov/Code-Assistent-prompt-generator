@@ -3,7 +3,7 @@
 # Запуск: ./test_mcp_9001_curl.sh [URL]
 # Пример: ./test_mcp_9001_curl.sh http://127.0.0.1:9001
 
-MCP_URL="${1:-http://127.0.0.1:9001}"
+MCP_URL="${1:-http://185.28.85.26:9001}"
 BODY_LIST='{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
 BODY_CALL='{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get_current_weather","arguments":{"location":"Moscow"}}}'
 HEADERS=(-H "Content-Type: application/json" -H "Accept: application/json, text/event-stream")

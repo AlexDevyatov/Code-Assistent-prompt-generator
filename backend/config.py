@@ -20,9 +20,9 @@ HUGGINGFACE_API_KEY = os.getenv("HUGGINGFACE_API_KEY")  # Опционально
 # MCP сервер настройки
 #
 # MCP Weather server развернут рядом с нашим backend (тот же хост), порт 9001.
-# Поэтому по умолчанию используем localhost:9001; при необходимости переопределяйте
+# По умолчанию MCP на 185.28.85.26:9001; при необходимости переопределяйте
 # через переменную окружения MCP_WEATHER_SERVER_URL.
-MCP_WEATHER_SERVER_URL = os.getenv("MCP_WEATHER_SERVER_URL", "http://127.0.0.1:9001")
+MCP_WEATHER_SERVER_URL = os.getenv("MCP_WEATHER_SERVER_URL", "http://185.28.85.26:9001")
 MCP_USE_HTTP = os.getenv("MCP_USE_HTTP", "true").lower() == "true"
 
 # Настройки приложения

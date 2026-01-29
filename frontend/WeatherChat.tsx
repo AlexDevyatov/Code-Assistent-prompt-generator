@@ -119,7 +119,7 @@ function WeatherChat() {
 
     try {
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 90000)
+      const timeoutId = setTimeout(() => controller.abort(new DOMException('Request timeout', 'AbortError')), 90000)
       const res = await fetch('/api/weather-chat', {
         method: 'POST',
         headers: {
@@ -149,11 +149,14 @@ function WeatherChat() {
 
       typeMessage(loadingMessage.id, data.response)
     } catch (err) {
+      const name = err instanceof Error ? err.name : ''
       const rawMessage = err instanceof Error ? err.message : 'Произошла ошибка'
       const friendlyMessage =
-        rawMessage === 'Failed to fetch' || rawMessage.includes('fetch')
-          ? 'Сервер недоступен или таймаут. Проверьте, что бэкенд запущен (порт 8000) и MCP на 9001.'
-          : rawMessage
+        name === 'AbortError' || rawMessage.includes('abort') || rawMessage.includes('timeout')
+          ? 'Таймаут запроса. Сервер или MCP не ответили вовремя (90 с).'
+          : rawMessage === 'Failed to fetch' || rawMessage.includes('fetch')
+            ? 'Сервер недоступен. Проверьте, что бэкенд запущен (порт 8000) и MCP на 9001.'
+            : rawMessage
       setMessages((prev) =>
         prev.map((msg) =>
           msg.id === loadingMessage.id

@@ -19,7 +19,7 @@ from typing import Any, Dict
 
 import httpx
 
-MCP_URL = "http://127.0.0.1:9001"
+MCP_URL = "http://185.28.85.26:9001"
 # Для SSE/HTTP MCP часто используется endpoint /messages/
 MCP_MESSAGES_URL = f"{MCP_URL.rstrip('/')}/messages/"
 

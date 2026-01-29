@@ -14,7 +14,7 @@ try:
 except ImportError:
     # Если конфигурация не доступна, используем значения по умолчанию
     # MCP Weather server развернут рядом с backend (тот же хост), порт 9001.
-    MCP_WEATHER_SERVER_URL = os.getenv("MCP_WEATHER_SERVER_URL", "http://127.0.0.1:9001")
+    MCP_WEATHER_SERVER_URL = os.getenv("MCP_WEATHER_SERVER_URL", "http://185.28.85.26:9001")
     MCP_USE_HTTP = os.getenv("MCP_USE_HTTP", "true").lower() == "true"
 
 logger = logging.getLogger(__name__)
@@ -562,7 +562,7 @@ _MCP_HTTP_HEADERS = {
 }
 
 # Кэш SSE-сессий для MCP серверов (Python SDK SSE требует GET /sse → session_id → POST /messages?session_id=)
-# ключ: base_url (e.g. http://127.0.0.1:9001), значение: {session_id, reader_task, response_futures}
+# ключ: base_url (e.g. http://185.28.85.26:9001), значение: {session_id, reader_task, response_futures}
 _sse_sessions: Dict[str, Dict[str, Any]] = {}
 _sse_lock = asyncio.Lock()
 _sse_request_id = 0
