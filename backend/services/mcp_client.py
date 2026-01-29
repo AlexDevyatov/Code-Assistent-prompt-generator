@@ -604,10 +604,18 @@ async def _sse_read_loop(
                     try:
                         msg = json.loads(data)
                         rid = msg.get("id")
-                        if rid is not None and rid in response_futures:
-                            fut = response_futures.pop(rid, None)
-                            if fut and not fut.done():
-                                fut.set_result(msg.get("result", msg))
+                        if rid is not None:
+                            keys_to_try = [rid]
+                            if isinstance(rid, str) and rid.isdigit():
+                                keys_to_try.append(int(rid))
+                            elif isinstance(rid, int):
+                                keys_to_try.append(str(rid))
+                            for k in keys_to_try:
+                                if k in response_futures:
+                                    fut = response_futures.pop(k, None)
+                                    if fut and not fut.done():
+                                        fut.set_result(msg.get("result", msg))
+                                    break
                     except (json.JSONDecodeError, KeyError):
                         pass
                 event_type = None
@@ -648,6 +656,7 @@ async def _ensure_sse_session(base_url: str) -> str:
             "response_futures": response_futures,
             "messages_url": f"{base_clean}/messages/",
             "_client": client,
+            "initialized": False,
         }
     try:
         await asyncio.wait_for(session_ready.wait(), timeout=15.0)
@@ -665,8 +674,45 @@ async def _ensure_sse_session(base_url: str) -> str:
     return session_id
 
 
+async def _mcp_sse_do_initialize(base_clean: str, session_id: str, entry: Dict[str, Any]) -> None:
+    """MCP handshake: initialize + notifications/initialized (без этого сервер не шлёт ответы на tools/list)."""
+    response_futures = entry["response_futures"]
+    messages_url = entry["messages_url"]
+    init_id = 0
+    async with _sse_request_id_lock:
+        global _sse_request_id
+        _sse_request_id += 1
+        init_id = _sse_request_id
+    init_future: asyncio.Future = asyncio.Future()
+    response_futures[init_id] = init_future
+    post_url = f"{messages_url}?session_id={session_id}"
+    try:
+        init_request = {
+            "jsonrpc": "2.0",
+            "id": init_id,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {"name": "deepseek-web-client", "version": "1.0"},
+            },
+        }
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            r = await client.post(post_url, json=init_request, headers=_MCP_HTTP_HEADERS)
+            if r.status_code != 202:
+                r.raise_for_status()
+        await asyncio.wait_for(init_future, timeout=15.0)
+        notif = {"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}}
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            await client.post(post_url, json=notif, headers=_MCP_HTTP_HEADERS)
+        entry["initialized"] = True
+        logger.info(f"🌐 MCP SSE initialized for {base_clean}")
+    finally:
+        response_futures.pop(init_id, None)
+
+
 async def _call_mcp_via_http_sse(base_url: str, method: str, params: Dict[str, Any], request_id: Optional[int] = None) -> Dict[str, Any]:
-    """Вызов MCP через SSE: установка сессии, POST с session_id, ожидание ответа из SSE stream."""
+    """Вызов MCP через SSE: установка сессии, при необходимости initialize, POST с session_id, ожидание ответа из SSE stream."""
     global _sse_request_id
     if request_id is None:
         async with _sse_request_id_lock:
@@ -677,6 +723,8 @@ async def _call_mcp_via_http_sse(base_url: str, method: str, params: Dict[str, A
     entry = _sse_sessions.get(base_clean)
     if not entry:
         raise RuntimeError("MCP SSE session lost")
+    if not entry.get("initialized"):
+        await _mcp_sse_do_initialize(base_clean, session_id, entry)
     response_futures = entry["response_futures"]
     messages_url = entry["messages_url"]
     jsonrpc_request = {
