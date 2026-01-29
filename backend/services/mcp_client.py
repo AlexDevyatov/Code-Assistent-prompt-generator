@@ -581,13 +581,14 @@ async def _call_mcp_via_http(server_url: str, method: str, params: Dict[str, Any
         "method": method,
         "params": params or {}
     }
-    urls_to_try = [server_url]
-    # При 400 на /messages/ пробуем корневой URL (некоторые MCP серверы принимают только POST на /)
-    if "/messages" in server_url:
-        parsed = urlparse(server_url)
-        base_url = urlunparse((parsed.scheme, parsed.netloc, "/", "", "", ""))
-        if base_url != server_url.rstrip("/"):
-            urls_to_try.append(base_url.rstrip("/") or base_url)
+    # Многие MCP серверы принимают JSON-RPC только на корне (/) — пробуем корень первым
+    parsed = urlparse(server_url)
+    base_url = urlunparse((parsed.scheme, parsed.netloc, "/", "", "", ""))
+    base_clean = base_url.rstrip("/") or base_url
+    if "/messages" in server_url and base_clean != server_url.rstrip("/"):
+        urls_to_try = [base_clean, server_url]
+    else:
+        urls_to_try = [server_url]
 
     last_error = None
     for url in urls_to_try:
@@ -613,7 +614,7 @@ async def _call_mcp_via_http(server_url: str, method: str, params: Dict[str, Any
             logger.warning(
                 f"MCP server {url} returned HTTP {e.response.status_code}: {body}"
             )
-            if e.response.status_code == 400 and url == urls_to_try[0] and len(urls_to_try) > 1:
+            if e.response.status_code in (400, 404) and url == urls_to_try[0] and len(urls_to_try) > 1:
                 continue  # retry with base URL
             logger.error(
                 f"HTTP status error calling MCP server {url}: {e.response.status_code} - {e.response.text}"
@@ -628,8 +629,9 @@ async def _call_mcp_via_http(server_url: str, method: str, params: Dict[str, Any
             logger.error(f"HTTP error calling MCP server {url}: {e}")
             raise RuntimeError(f"Failed to connect to MCP server: {e}")
     if last_error:
+        code = last_error.response.status_code
         body = (last_error.response.text or "")[:500]
-        raise RuntimeError(f"MCP server HTTP 400. Response: {body}")
+        raise RuntimeError(f"MCP server HTTP {code}. Response: {body}")
     return {}
 
 
