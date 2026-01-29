@@ -555,6 +555,13 @@ async def _list_tools_with_fallback(server_name: str, locale: str = "ru-RU") -> 
         raise RuntimeError(f"Error communicating with MCP server: {e}")
 
 
+# Заголовки по спецификации MCP HTTP transport (POST, Accept: application/json и text/event-stream)
+_MCP_HTTP_HEADERS = {
+    "Content-Type": "application/json",
+    "Accept": "application/json, text/event-stream",
+}
+
+
 async def _call_mcp_via_http(server_url: str, method: str, params: Dict[str, Any] = None, request_id: int = 1) -> Dict[str, Any]:
     """
     Вызов MCP метода через HTTP
@@ -568,51 +575,62 @@ async def _call_mcp_via_http(server_url: str, method: str, params: Dict[str, Any
     Returns:
         Результат вызова
     """
-    try:
-        jsonrpc_request = {
-            "jsonrpc": "2.0",
-            "id": request_id,
-            "method": method,
-            "params": params or {}
-        }
-        
-        logger.info(f"🌐 Calling MCP via HTTP: {server_url}, method: {method}, params: {params}")
-        
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                server_url,
-                json=jsonrpc_request,
-                headers={"Content-Type": "application/json"}
+    jsonrpc_request = {
+        "jsonrpc": "2.0",
+        "id": request_id,
+        "method": method,
+        "params": params or {}
+    }
+    urls_to_try = [server_url]
+    # При 400 на /messages/ пробуем корневой URL (некоторые MCP серверы принимают только POST на /)
+    if "/messages" in server_url:
+        parsed = urlparse(server_url)
+        base_url = urlunparse((parsed.scheme, parsed.netloc, "/", "", "", ""))
+        if base_url != server_url.rstrip("/"):
+            urls_to_try.append(base_url.rstrip("/") or base_url)
+
+    last_error = None
+    for url in urls_to_try:
+        try:
+            logger.info(f"🌐 Calling MCP via HTTP: {url}, method: {method}, params: {params}")
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(url, json=jsonrpc_request, headers=_MCP_HTTP_HEADERS)
+                response.raise_for_status()
+                result = response.json()
+                logger.debug(f"MCP HTTP response: {result}")
+                if "error" in result:
+                    error_info = result["error"]
+                    error_msg = error_info.get("message", str(error_info))
+                    logger.error(f"MCP server error: {error_msg}")
+                    raise RuntimeError(f"MCP server error: {error_msg}")
+                if "result" not in result:
+                    logger.warning(f"No 'result' field in MCP response: {result}")
+                    return {}
+                return result.get("result", {})
+        except httpx.HTTPStatusError as e:
+            last_error = e
+            body = (e.response.text or "")[:500]
+            logger.warning(
+                f"MCP server {url} returned HTTP {e.response.status_code}: {body}"
             )
-            response.raise_for_status()
-            result = response.json()
-            
-            logger.debug(f"MCP HTTP response: {result}")
-            
-            if "error" in result:
-                error_info = result["error"]
-                error_msg = error_info.get("message", str(error_info))
-                logger.error(f"MCP server error: {error_msg}")
-                raise RuntimeError(f"MCP server error: {error_msg}")
-            
-            if "result" not in result:
-                logger.warning(f"No 'result' field in MCP response: {result}")
-                return {}
-            
-            return result.get("result", {})
-            
-    except httpx.HTTPStatusError as e:
-        logger.error(f"HTTP status error calling MCP server {server_url}: {e.response.status_code} - {e.response.text}")
-        raise RuntimeError(f"Failed to connect to MCP server: HTTP {e.response.status_code}")
-    except httpx.HTTPError as e:
-        logger.error(f"HTTP error calling MCP server {server_url}: {e}")
-        raise RuntimeError(f"Failed to connect to MCP server: {e}")
-    except json.JSONDecodeError as e:
-        logger.error(f"Invalid JSON response from MCP server: {e}")
-        raise RuntimeError(f"Invalid JSON response from MCP server: {e}")
-    except Exception as e:
-        logger.error(f"Error calling MCP via HTTP: {e}")
-        raise
+            if e.response.status_code == 400 and url == urls_to_try[0] and len(urls_to_try) > 1:
+                continue  # retry with base URL
+            logger.error(
+                f"HTTP status error calling MCP server {url}: {e.response.status_code} - {e.response.text}"
+            )
+            raise RuntimeError(
+                f"Failed to connect to MCP server: HTTP {e.response.status_code}. Response: {body}"
+            )
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON response from MCP server {url}: {e}")
+            raise RuntimeError(f"Invalid JSON response from MCP server: {e}")
+        except httpx.HTTPError as e:
+            logger.error(f"HTTP error calling MCP server {url}: {e}")
+            raise RuntimeError(f"Failed to connect to MCP server: {e}")
+    if last_error:
+        body = (last_error.response.text or "")[:500]
+        raise RuntimeError(f"MCP server HTTP 400. Response: {body}")
+    return {}
 
 
 async def list_mcp_tools(server_name: str, locale: str = "ru-RU") -> Dict[str, Any]:
