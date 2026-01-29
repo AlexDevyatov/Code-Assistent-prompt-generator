@@ -561,6 +561,149 @@ _MCP_HTTP_HEADERS = {
     "Accept": "application/json, text/event-stream",
 }
 
+# Кэш SSE-сессий для MCP серверов (Python SDK SSE требует GET /sse → session_id → POST /messages?session_id=)
+# ключ: base_url (e.g. http://127.0.0.1:9001), значение: {session_id, reader_task, response_futures}
+_sse_sessions: Dict[str, Dict[str, Any]] = {}
+_sse_lock = asyncio.Lock()
+_sse_request_id = 0
+_sse_request_id_lock = asyncio.Lock()
+
+
+def _parse_session_id_from_endpoint_data(data: str) -> Optional[str]:
+    """Из данных SSE event 'endpoint' извлекает session_id (MCP SDK: quote(path)?session_id=HEX)."""
+    if not data:
+        return None
+    from urllib.parse import unquote
+    raw = unquote(data.strip())
+    if "session_id=" in raw:
+        return raw.split("session_id=", 1)[1].split("&")[0].strip()
+    return None
+
+
+async def _sse_read_loop(
+    base_url: str,
+    stream: Any,
+    response_futures: Dict[int, asyncio.Future],
+    session_id_holder: Dict[str, str],
+    session_ready: asyncio.Event,
+) -> None:
+    """Читает SSE stream: первый event 'endpoint' → session_id, дальше 'message' → response_futures."""
+    try:
+        event_type = None
+        async for line in stream.aiter_lines():
+            if line.startswith("event:"):
+                event_type = line[6:].strip()
+            elif line.startswith("data:"):
+                data = line[5:].strip()
+                if event_type == "endpoint" and not session_id_holder.get("id"):
+                    sid = _parse_session_id_from_endpoint_data(data)
+                    if sid:
+                        session_id_holder["id"] = sid
+                        session_ready.set()
+                elif event_type == "message":
+                    try:
+                        msg = json.loads(data)
+                        rid = msg.get("id")
+                        if rid is not None and rid in response_futures:
+                            fut = response_futures.pop(rid, None)
+                            if fut and not fut.done():
+                                fut.set_result(msg.get("result", msg))
+                    except (json.JSONDecodeError, KeyError):
+                        pass
+                event_type = None
+    except (asyncio.CancelledError, Exception) as e:
+        logger.debug(f"SSE read loop ended for {base_url}: {e}")
+    finally:
+        for fut in response_futures.values():
+            if not fut.done():
+                fut.cancel()
+
+
+async def _ensure_sse_session(base_url: str) -> str:
+    """
+    Устанавливает SSE-сессию: GET /sse, парсит session_id из event 'endpoint',
+    держит соединение открытым для приёма ответов (POST возвращает 202, ответ идёт по SSE).
+    """
+    base_clean = base_url.rstrip("/")
+    sse_url = f"{base_clean}/sse"
+    async with _sse_lock:
+        if base_clean in _sse_sessions:
+            entry = _sse_sessions[base_clean]
+            if entry.get("session_id") and (not entry.get("reader_task") or not entry["reader_task"].done()):
+                return entry["session_id"]
+            _sse_sessions.pop(base_clean, None)
+
+        response_futures: Dict[int, asyncio.Future] = {}
+        session_id_holder: Dict[str, str] = {}
+        session_ready = asyncio.Event()
+        client = httpx.AsyncClient(timeout=60.0)
+        response = await client.get(sse_url, headers=_MCP_HTTP_HEADERS)
+        response.raise_for_status()
+        reader_task = asyncio.create_task(
+            _sse_read_loop(base_url, response, response_futures, session_id_holder, session_ready)
+        )
+        _sse_sessions[base_clean] = {
+            "session_id": None,
+            "reader_task": reader_task,
+            "response_futures": response_futures,
+            "messages_url": f"{base_clean}/messages/",
+            "_client": client,
+        }
+    try:
+        await asyncio.wait_for(session_ready.wait(), timeout=15.0)
+    except asyncio.TimeoutError:
+        reader_task.cancel()
+        raise RuntimeError("MCP SSE: timeout waiting for session_id from /sse")
+    session_id = session_id_holder.get("id")
+    if not session_id:
+        reader_task.cancel()
+        raise RuntimeError("MCP SSE: could not get session_id from /sse endpoint event")
+    async with _sse_lock:
+        if base_clean in _sse_sessions:
+            _sse_sessions[base_clean]["session_id"] = session_id
+    logger.info(f"🌐 MCP SSE session established for {base_clean}, session_id={session_id[:8]}...")
+    return session_id
+
+
+async def _call_mcp_via_http_sse(base_url: str, method: str, params: Dict[str, Any], request_id: Optional[int] = None) -> Dict[str, Any]:
+    """Вызов MCP через SSE: установка сессии, POST с session_id, ожидание ответа из SSE stream."""
+    global _sse_request_id
+    if request_id is None:
+        async with _sse_request_id_lock:
+            _sse_request_id += 1
+            request_id = _sse_request_id
+    base_clean = base_url.rstrip("/")
+    session_id = await _ensure_sse_session(base_clean)
+    entry = _sse_sessions.get(base_clean)
+    if not entry:
+        raise RuntimeError("MCP SSE session lost")
+    response_futures = entry["response_futures"]
+    messages_url = entry["messages_url"]
+    jsonrpc_request = {
+        "jsonrpc": "2.0",
+        "id": request_id,
+        "method": method,
+        "params": params or {},
+    }
+    future: asyncio.Future = asyncio.Future()
+    response_futures[request_id] = future
+    post_url = f"{messages_url}?session_id={session_id}" if "?" not in messages_url else f"{messages_url}&session_id={session_id}"
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(post_url, json=jsonrpc_request, headers=_MCP_HTTP_HEADERS)
+            if response.status_code == 202:
+                pass  # Accepted — ответ придёт по SSE
+            else:
+                response.raise_for_status()
+                result = response.json()
+                if "error" in result:
+                    raise RuntimeError(result["error"].get("message", str(result["error"])))
+                return result.get("result", {})
+        result = await asyncio.wait_for(future, timeout=30.0)
+        return result if isinstance(result, dict) else {}
+    finally:
+        response_futures.pop(request_id, None)
+
 
 async def _call_mcp_via_http(server_url: str, method: str, params: Dict[str, Any] = None, request_id: int = 1) -> Dict[str, Any]:
     """
@@ -664,12 +807,8 @@ async def list_mcp_tools(server_name: str, locale: str = "ru-RU") -> Dict[str, A
                         server_url = urlunparse((parsed.scheme, parsed.netloc, "/messages/", "", "", ""))
                 
                 logger.info(f"🌐 Calling MCP Weather server at: {server_url}")
-                result = await _call_mcp_via_http(
-                    server_url,
-                    "tools/list",
-                    {},
-                    request_id=1
-                )
+                base_url = MCP_WEATHER_SERVER_URL.rstrip("/")
+                result = await _call_mcp_via_http_sse(base_url, "tools/list", {}, request_id=None)
                 server_info = {
                     "name": server_name,
                     "tools": result.get("tools", [])
@@ -929,19 +1068,16 @@ async def call_mcp_tool(server_name: str, tool_name: str, arguments: Dict[str, A
                         server_url = urlunparse((parsed.scheme, parsed.netloc, "/messages/", "", "", ""))
                 
                 logger.info(f"🌐 Calling MCP Weather server at: {server_url}")
-                result = await _call_mcp_via_http(
-                    server_url,
+                base_url = MCP_WEATHER_SERVER_URL.rstrip("/")
+                result = await _call_mcp_via_http_sse(
+                    base_url,
                     "tools/call",
-                    {
-                        "name": tool_name,
-                        "arguments": arguments
-                    },
-                    request_id=2
+                    {"name": tool_name, "arguments": arguments},
+                    request_id=None,
                 )
-                # Преобразуем результат в формат, ожидаемый кодом
                 return {
                     "content": result.get("content", []),
-                    "isError": result.get("isError", False)
+                    "isError": result.get("isError", False),
                 }
             except Exception as e:
                 logger.error(f"Error calling tool via HTTP: {e}")
