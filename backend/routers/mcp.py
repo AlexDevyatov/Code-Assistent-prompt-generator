@@ -2,9 +2,9 @@
 import logging
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Dict, Any
 
-from backend.services.mcp_client import list_mcp_tools
+from backend.services.mcp_client import list_mcp_tools, call_mcp_tool
 
 logger = logging.getLogger(__name__)
 
@@ -90,3 +90,39 @@ async def list_tools_summary(server_name: str):
         Краткая информация о сервере и его инструментах
     """
     return await list_tools_get(server_name, summary=True)
+
+
+class MCPCallToolRequest(BaseModel):
+    """Запрос на вызов инструмента MCP сервера"""
+    server_name: str = "mcp-weather"
+    tool_name: str
+    arguments: Dict[str, Any] = {}
+    locale: Optional[str] = "ru-RU"
+
+
+@router.post("/call-tool")
+async def call_tool(request: MCPCallToolRequest):
+    """
+    Вызов инструмента MCP сервера (например, mcp-weather на порту 9001).
+    
+    Args:
+        request: server_name, tool_name, arguments, locale
+    
+    Returns:
+        Результат вызова (content, isError и т.д.)
+    """
+    try:
+        logger.info(
+            f"Calling MCP tool: server={request.server_name}, "
+            f"tool={request.tool_name}, args={request.arguments}"
+        )
+        result = await call_mcp_tool(
+            request.server_name,
+            request.tool_name,
+            request.arguments,
+            locale=request.locale or "ru-RU",
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Error calling MCP tool: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
