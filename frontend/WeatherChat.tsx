@@ -118,15 +118,19 @@ function WeatherChat() {
     scrollToBottom()
 
     try {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 90000)
       const res = await fetch('/api/weather-chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ 
-          prompt: userMessage.content
+        body: JSON.stringify({
+          prompt: userMessage.content,
         }),
+        signal: controller.signal,
       })
+      clearTimeout(timeoutId)
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({ detail: 'Unknown error' }))
@@ -134,7 +138,7 @@ function WeatherChat() {
       }
 
       const data: WeatherChatResponse = await res.json()
-      
+
       setMessages((prev) =>
         prev.map((msg) =>
           msg.id === loadingMessage.id
@@ -145,12 +149,17 @@ function WeatherChat() {
 
       typeMessage(loadingMessage.id, data.response)
     } catch (err) {
+      const rawMessage = err instanceof Error ? err.message : 'Произошла ошибка'
+      const friendlyMessage =
+        rawMessage === 'Failed to fetch' || rawMessage.includes('fetch')
+          ? 'Сервер недоступен или таймаут. Проверьте, что бэкенд запущен (порт 8000) и MCP на 9001.'
+          : rawMessage
       setMessages((prev) =>
         prev.map((msg) =>
           msg.id === loadingMessage.id
             ? {
                 ...msg,
-                content: `Ошибка: ${err instanceof Error ? err.message : 'Произошла ошибка'}`,
+                content: `Ошибка: ${friendlyMessage}`,
                 isTyping: false,
               }
             : msg

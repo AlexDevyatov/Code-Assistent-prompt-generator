@@ -31,8 +31,13 @@ function MCPServer() {
     setServerInfo(null)
 
     try {
-      const response = await fetch(`/api/mcp/list-tools/${encodeURIComponent(serverName)}`)
-      
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 60000)
+      const response = await fetch(`/api/mcp/list-tools/${encodeURIComponent(serverName)}`, {
+        signal: controller.signal,
+      })
+      clearTimeout(timeoutId)
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }))
         throw new Error(errorData.detail || `HTTP error! status: ${response.status}`)
@@ -40,12 +45,16 @@ function MCPServer() {
 
       const data: MCPServerInfo = await response.json()
       setServerInfo(data)
-      
+
       if (data.error) {
         setError(data.error)
       }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch MCP tools'
+      const raw = err instanceof Error ? err.message : 'Failed to fetch MCP tools'
+      const errorMessage =
+        raw === 'Failed to fetch' || raw.includes('fetch')
+          ? 'Сервер недоступен или таймаут. Проверьте бэкенд (порт 8000) и прокси /api.'
+          : raw
       setError(errorMessage)
       console.error('Error fetching MCP tools:', err)
     } finally {
