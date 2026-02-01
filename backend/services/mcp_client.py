@@ -19,6 +19,9 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+# Имя stdio MCP-сервера проекта (backend/mcp/server.py) для list_tools и call_tool
+PROJECT_MCP_SERVER_NAME = "deepseek-web-mcp"
+
 # Попытка импортировать MCP SDK
 try:
     from mcp import ClientSession, StdioServerParameters
@@ -28,6 +31,22 @@ except ImportError as e:
     MCP_AVAILABLE = False
     IMPORT_ERROR = str(e)
     logger.warning(f"MCP SDK not available: {IMPORT_ERROR}. Using fallback implementation.")
+
+
+def _get_project_mcp_server_params():  # -> StdioServerParameters | None when MCP_AVAILABLE
+    """Параметры для запуска stdio MCP-сервера проекта (backend/mcp/server.py)."""
+    if not MCP_AVAILABLE:
+        return None
+    # Корень проекта: backend/services/mcp_client.py -> backend -> project root
+    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    env = os.environ.copy()
+    env["PYTHONPATH"] = root
+    import sys
+    return StdioServerParameters(
+        command=sys.executable,
+        args=["-m", "backend.mcp.server"],
+        env=env,
+    )
 
 
 def _find_npx() -> Optional[str]:
@@ -159,16 +178,22 @@ def _resolve_mcp_server_command(server_name: str) -> Optional[str]:
 
 async def _list_tools_with_sdk(server_name: str, locale: str = "ru-RU") -> Dict[str, Any]:
     """Использование официального MCP SDK для получения инструментов"""
-    # Пытаемся найти правильное имя команды
-    resolved_command = _resolve_mcp_server_command(server_name)
-    if not resolved_command:
-        raise FileNotFoundError(f"MCP server '{server_name}' not found in PATH")
-    
-    server_params = StdioServerParameters(
-        command=resolved_command,
-        args=[],
-        env=None
-    )
+    # Сервер проекта (stdio): backend/mcp/server.py
+    if server_name == PROJECT_MCP_SERVER_NAME:
+        server_params = _get_project_mcp_server_params()
+        if not server_params:
+            raise FileNotFoundError(
+                f"MCP SDK not available. Install with: pip install mcp (Python >=3.10)"
+            )
+    else:
+        resolved_command = _resolve_mcp_server_command(server_name)
+        if not resolved_command:
+            raise FileNotFoundError(f"MCP server '{server_name}' not found in PATH")
+        server_params = StdioServerParameters(
+            command=resolved_command,
+            args=[],
+            env=None
+        )
     
     async with stdio_client(server_params) as (read, write):
         async with ClientSession(read, write) as session:
@@ -188,10 +213,11 @@ async def _list_tools_with_sdk(server_name: str, locale: str = "ru-RU") -> Dict[
             
             if tools_result and hasattr(tools_result, 'tools'):
                 for tool in tools_result.tools:
+                    schema = getattr(tool, 'inputSchema', None) or getattr(tool, 'input_schema', {})
                     tool_info = {
                         "name": tool.name,
                         "description": tool.description or "",
-                        "inputSchema": getattr(tool, 'inputSchema', {})
+                        "inputSchema": schema or {}
                     }
                     server_info["tools"].append(tool_info)
             
@@ -831,12 +857,19 @@ async def list_mcp_tools(server_name: str, locale: str = "ru-RU") -> Dict[str, A
     Получение списка доступных инструментов от MCP сервера
     
     Args:
-        server_name: Имя MCP сервера (команда, доступная в PATH) или "mcp-weather" для HTTP
+        server_name: Имя MCP сервера (команда, доступная в PATH), "mcp-weather" для HTTP,
+                     или "deepseek-web-mcp" для stdio-сервера проекта (backend/mcp/server.py)
         locale: Предпочтительный язык для ответов (например, "ru-RU", "en-US", "zh-CN")
     
     Returns:
         Словарь с информацией о сервере и инструментах
     """
+    if server_name == PROJECT_MCP_SERVER_NAME and not MCP_AVAILABLE:
+        return {
+            "name": PROJECT_MCP_SERVER_NAME,
+            "error": "Для сервера проекта (stdio) нужен MCP SDK. Установите: pip install mcp (требуется Python >=3.10).",
+            "tools": [],
+        }
     try:
         # Если это weather сервер и используется HTTP, подключаемся через HTTP
         if server_name == "mcp-weather" and MCP_USE_HTTP:
@@ -1133,25 +1166,29 @@ async def call_mcp_tool(server_name: str, tool_name: str, arguments: Dict[str, A
         
         if MCP_AVAILABLE:
             try:
-                resolved_command = _resolve_mcp_server_command(server_name)
-                if not resolved_command:
-                    raise FileNotFoundError(f"MCP server '{server_name}' not found in PATH")
-                
-                # Если команда содержит пробелы (например, "python3 /path/to/server.py")
-                if ' ' in resolved_command:
-                    cmd_parts = resolved_command.split()
-                    server_params = StdioServerParameters(
-                        command=cmd_parts[0],
-                        args=cmd_parts[1:],
-                        env=None
-                    )
+                if server_name == PROJECT_MCP_SERVER_NAME:
+                    server_params = _get_project_mcp_server_params()
+                    if not server_params:
+                        raise FileNotFoundError(
+                            "MCP SDK not available. Install with: pip install mcp (Python >=3.10)"
+                        )
                 else:
-                    server_params = StdioServerParameters(
-                        command=resolved_command,
-                        args=[],
-                        env=None
-                    )
-                
+                    resolved_command = _resolve_mcp_server_command(server_name)
+                    if not resolved_command:
+                        raise FileNotFoundError(f"MCP server '{server_name}' not found in PATH")
+                    if ' ' in resolved_command:
+                        cmd_parts = resolved_command.split()
+                        server_params = StdioServerParameters(
+                            command=cmd_parts[0],
+                            args=cmd_parts[1:],
+                            env=None
+                        )
+                    else:
+                        server_params = StdioServerParameters(
+                            command=resolved_command,
+                            args=[],
+                            env=None
+                        )
                 async with stdio_client(server_params) as (read, write):
                     async with ClientSession(read, write) as session:
                         await session.initialize()

@@ -108,3 +108,41 @@ npm install -g @modelcontextprotocol/server-http
 2. **Restart the server** to register new routes
 3. Run the test script: `./test_mcp_curl.sh`
 4. Test via web interface at `/mcp-server`
+
+---
+
+## Stdio MCP server (backend/mcp/) — интеграция в проект
+
+В проекте есть **собственный MCP stdio-сервер** в `backend/mcp/`: он переиспользует бизнес-логику (например, `backend/services/users.py`) и не встроен в FastAPI lifespan.
+
+### Требования
+
+- Python **>=3.10** (для пакета `mcp`)
+- Установка: `pip install mcp`
+
+### Запуск MCP-клиента (list_tools)
+
+Из **корня проекта**:
+
+```bash
+python -m backend.mcp.client
+```
+
+(или `python3` при необходимости). Клиент поднимает MCP-сервер как subprocess, подключается по stdio, вызывает `list_tools()` и выводит список инструментов.
+
+### Ожидаемый вывод list_tools()
+
+```
+MCP tools (name + description):
+
+  - health_check: Проверка доступности сервера. Возвращает {"status": "ok"}.
+  - get_users: Возвращает список пользователей (из сервиса backend).
+```
+
+### Запуск только MCP-сервера (для отладки)
+
+```bash
+python -m backend.mcp.server
+```
+
+Сервер читает/пишет JSON-RPC по stdin/stdout; для проверки удобнее использовать клиент выше.

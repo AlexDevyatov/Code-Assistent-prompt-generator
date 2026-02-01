@@ -45,6 +45,48 @@
   margin-bottom: 0;
 }
 
+/* Блок «Сервер проекта (stdio)» — демонстрация backend/mcp */
+.mcp-server-project-section {
+  margin-bottom: 2.5rem;
+  padding: 1.5rem;
+  background: linear-gradient(135deg, #f0f4ff 0%, #e8eeff 100%);
+  border: 2px solid #667eea;
+  border-radius: 12px;
+}
+
+.mcp-server-project-title {
+  font-size: 1.5rem;
+  color: #333;
+  margin: 0 0 0.5rem 0;
+  font-weight: 600;
+}
+
+.mcp-server-project-desc {
+  font-size: 0.95rem;
+  color: #555;
+  line-height: 1.5;
+  margin: 0 0 1rem 0;
+}
+
+.mcp-server-project-desc code {
+  background: rgba(102, 126, 234, 0.15);
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+
+.mcp-server-project-button {
+  margin-bottom: 0.5rem;
+}
+
+.mcp-server-project-error {
+  margin-top: 1rem;
+}
+
+.mcp-server-project-results {
+  margin-top: 1.5rem;
+}
+
 .mcp-server-form {
   margin-bottom: 2rem;
 }
