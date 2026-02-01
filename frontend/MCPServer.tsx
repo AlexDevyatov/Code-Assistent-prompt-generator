@@ -18,70 +18,9 @@ interface MCPServerInfo {
 }
 
 function MCPServer() {
-  const [serverName, setServerName] = useState('mcp-server-google-search')
-  const [serverInfo, setServerInfo] = useState<MCPServerInfo | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  // Сервер проекта (stdio): backend/mcp/server.py — health_check, get_users
   const [projectInfo, setProjectInfo] = useState<MCPServerInfo | null>(null)
   const [projectLoading, setProjectLoading] = useState(false)
   const [projectError, setProjectError] = useState<string | null>(null)
-
-  const fetchTools = async () => {
-    if (!serverName.trim()) {
-      setError('Please enter a server name')
-      return
-    }
-
-    setIsLoading(true)
-    setError(null)
-    setServerInfo(null)
-
-    try {
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(new DOMException('Request timeout', 'AbortError')), 60000)
-      const response = await fetch(`/api/mcp/list-tools/${encodeURIComponent(serverName)}`, {
-        signal: controller.signal,
-      })
-      clearTimeout(timeoutId)
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }))
-        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`)
-      }
-
-      const data: MCPServerInfo = await response.json()
-      setServerInfo(data)
-
-      if (data.error) {
-        setError(data.error)
-      }
-    } catch (err) {
-      const name = err instanceof Error ? err.name : ''
-      const raw = err instanceof Error ? err.message : 'Failed to fetch MCP tools'
-      const errorMessage =
-        name === 'AbortError' || raw.includes('abort') || raw.includes('timeout')
-          ? 'Таймаут запроса (60 с). Бэкенд или MCP не ответили вовремя.'
-          : raw === 'Failed to fetch' || raw.includes('fetch')
-            ? 'Сервер недоступен. Проверьте бэкенд (порт 8000) и прокси /api.'
-            : raw
-      setError(errorMessage)
-      console.error('Error fetching MCP tools:', err)
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    // Автоматически загружаем инструменты при монтировании компонента
-    fetchTools()
-  }, [])
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    fetchTools()
-  }
 
   const fetchProjectTools = async () => {
     setProjectLoading(true)
@@ -109,6 +48,10 @@ function MCPServer() {
       setProjectLoading(false)
     }
   }
+
+  useEffect(() => {
+    fetchProjectTools()
+  }, [])
 
   const renderToolCards = (tools: Tool[]) =>
     tools.map((tool, index) => {
@@ -164,11 +107,10 @@ function MCPServer() {
       <div className="mcp-server-container">
         <div className="mcp-server-header">
           <Link to="/" className="mcp-server-back-link">← Назад</Link>
-          <h1 className="mcp-server-title">MCP Server Tools</h1>
-          <p className="mcp-server-subtitle">Подключение к MCP серверу и просмотр доступных инструментов</p>
+          <h1 className="mcp-server-title">MCP Server (проектный stdio)</h1>
+          <p className="mcp-server-subtitle">Инструменты stdio MCP-сервера проекта (backend/mcp/server.py)</p>
         </div>
 
-        {/* Сервер проекта (stdio): backend/mcp — демонстрация интеграции MCP */}
         <section className="mcp-server-project-section">
           <h2 className="mcp-server-project-title">Сервер проекта (stdio)</h2>
           <p className="mcp-server-project-desc">
@@ -180,7 +122,7 @@ function MCPServer() {
             onClick={fetchProjectTools}
             disabled={projectLoading}
           >
-            {projectLoading ? 'Загрузка...' : 'Показать инструменты проекта'}
+            {projectLoading ? 'Загрузка...' : 'Обновить список инструментов'}
           </button>
           {projectError && (
             <div className="mcp-server-error mcp-server-project-error">
@@ -202,65 +144,6 @@ function MCPServer() {
             </div>
           )}
         </section>
-
-        <form onSubmit={handleSubmit} className="mcp-server-form">
-          <div className="mcp-server-input-group">
-            <label htmlFor="server-name" className="mcp-server-label">
-              Внешний MCP сервер (имя команды или mcp-weather):
-            </label>
-            <div className="mcp-server-input-wrapper">
-              <input
-                id="server-name"
-                type="text"
-                value={serverName}
-                onChange={(e) => setServerName(e.target.value)}
-                placeholder="mcp-server-google-search"
-                className="mcp-server-input"
-                disabled={isLoading}
-              />
-              <button
-                type="submit"
-                className="mcp-server-button"
-                disabled={isLoading || !serverName.trim()}
-              >
-                {isLoading ? 'Загрузка...' : 'Подключиться'}
-              </button>
-            </div>
-          </div>
-        </form>
-
-        {error && (
-          <div className="mcp-server-error">
-            <strong>Ошибка:</strong>
-            <pre className="mcp-server-error-text">{error}</pre>
-          </div>
-        )}
-
-        {isLoading && (
-          <div className="mcp-server-loading">
-            <div className="mcp-server-spinner"></div>
-            <p>Подключение к серверу и получение списка инструментов...</p>
-          </div>
-        )}
-
-        {serverInfo && !isLoading && (
-          <div className="mcp-server-results">
-            <div className="mcp-server-info">
-              <h2>Сервер: {serverInfo.name}</h2>
-              <p className="mcp-server-tools-count">
-                Найдено инструментов: {serverInfo.tools.length}
-              </p>
-            </div>
-
-            {serverInfo.tools.length === 0 ? (
-              <div className="mcp-server-empty">
-                <p>Инструменты не найдены. Убедитесь, что сервер установлен и доступен.</p>
-              </div>
-            ) : (
-              <div className="mcp-server-tools">{renderToolCards(serverInfo.tools)}</div>
-            )}
-          </div>
-        )}
       </div>
     </div>
   )
